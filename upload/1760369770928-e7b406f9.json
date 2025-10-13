@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "id": "1760369770928-e7b406f9",
+    "time": "2025-10-13T15:36:10.928Z",
+    "ip": "::1",
+    "method": "POST",
+    "url": "/upload"
+  },
+  "data": {
+    "value": 123,
+    "device": "esp32-curl"
+  }
+}

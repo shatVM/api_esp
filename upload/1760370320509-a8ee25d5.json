@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "id": "1760370320509-a8ee25d5",
+    "time": "2025-10-13T15:45:20.509Z",
+    "ip": "::ffff:10.14.33.5",
+    "method": "POST",
+    "url": "/upload"
+  },
+  "data": {
+    "value": 1,
+    "device": "host-test"
+  }
+}

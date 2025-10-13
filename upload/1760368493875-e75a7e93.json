@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "id": "1760368493875-e75a7e93",
+    "time": "2025-10-13T15:14:53.877Z",
+    "ip": "::ffff:10.14.33.5",
+    "method": "POST",
+    "url": "/upload"
+  },
+  "data": [
+    {
+      "ssid": "FreeZSTU",
+      "bssid": "6E:D7:9A:CD:26:04",
+      "rssi": -71,
+      "channel": 6,
+      "ip": "192.168.138.112",
+      "subnet": "255.255.240.0",
+      "gateway": "192.168.128.4",
+      "dns1": "195.69.223.138",
+      "dns2": "1.1.1.1",
+      "mac": "18:8B:0E:91:8E:3C",
+      "hostname": "esp32c3-918E3C",
+      "status": 3
+    },
+    {
+      "ssid": "FreeZSTU",
+      "bssid": "6E:D7:9A:CD:1E:86",
+      "rssi": -80,
+      "channel": 8,
+      "ip": "192.168.138.112",
+      "subnet": "255.255.240.0",
+      "gateway": "192.168.128.4",
+      "dns1": "195.69.223.138",
+      "dns2": "1.1.1.1",
+      "mac": "18:8B:0E:91:8E:3C",
+      "hostname": "esp32c3-918E3C",
+      "status": 3
+    },
+    {
+      "ssid": "FreeZSTU",
+      "bssid": "6E:D7:9A:CD:27:D6",
+      "rssi": -87,
+      "channel": 2,
+      "ip": "192.168.138.112",
+      "subnet": "255.255.240.0",
+      "gateway": "192.168.128.4",
+      "dns1": "195.69.223.138",
+      "dns2": "1.1.1.1",
+      "mac": "18:8B:0E:91:8E:3C",
+      "hostname": "esp32c3-918E3C",
+      "status": 3
+    }
+  ]
+}
