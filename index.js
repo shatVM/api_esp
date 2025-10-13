@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 
 // Increase limit if payloads may be large
 app.use(bodyParser.json({ limit: '256kb' }));
