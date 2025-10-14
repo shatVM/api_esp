@@ -1,33 +1,54 @@
+
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Received uploads</title>
+  <title>ESP32 Receiver</title>
   <link rel="stylesheet" href="/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="container two-col">
-    <aside class="sidebar">
-      <h2>Uploads</h2>
-      <ul id="uploadList" class="upload-list">
-        {{#if list}}
-          {{#each list}}
-            <li data-id="{{id}}"><strong>{{summary}}</strong><br/><small>{{time}}</small></li>
-          {{/each}}
-        {{else}}
-          <li>No uploads yet</li>
-        {{/if}}
-      </ul>
-    </aside>
+  <div class="header">
+    <h1>ESP32 Data Receiver</h1>
+    <a href="/">Back to Home</a>
+  </div>
 
-    <main class="detail">
-      <h2>Details</h2>
-      <div id="detailView">
-        <p>Select an upload on the left to see details.</p>
-      </div>
-      <p><a href="/">Back</a></p>
-    </main>
+  <div class="container">
+    <div class="two-col">
+      <aside class="sidebar">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h2>Received Uploads</h2>
+          <button id="deleteAllBtn" class="del">Видалити все</button>
+        </div>
+        <ul id="uploadList" class="upload-list">
+          {{#if list}}
+            {{#each list}}
+              <li data-id="{{id}}">
+                <div class="list-row">
+                  <div class="meta">
+                    <strong>{{summary}}</strong><br/>
+                    <small>{{time}}</small>
+                  </div>
+                  <div class="actions">
+                    <button data-id="{{id}}" class="del">Delete</button>
+                  </div>
+                </div>
+              </li>
+            {{/each}}
+          {{else}}
+            <li>No uploads yet</li>
+          {{/if}}
+        </ul>
+      </aside>
+
+      <main class="detail">
+        <h2>Details</h2>
+        <div id="detailView">
+          <p>Select an upload on the left to see details.</p>
+        </div>
+      </main>
+    </div>
   </div>
 
   <script>
@@ -44,8 +65,8 @@
         for (const it of items) {
           const li = document.createElement('li');
           li.dataset.id = it.id;
-          li.innerHTML = `<div class="list-row"><div class="meta"><strong>${it.summary}</strong><br/><small>${it.time}</small></div><div class="actions"><button data-id="${it.id}" class="del">Delete</button></div></div>`;
-          li.querySelector('.meta').addEventListener('click', () => loadDetail(it.id, li));
+          li.innerHTML = `<div class="list-row"><div class="meta"><strong>${it.device || 'No Summary'}</strong><br/><small>${new Date(it.time).toLocaleString()}</small></div><div class="actions"><button data-id="${it.id}" class="del">Delete</button></div></div>`;
+          li.addEventListener('click', () => loadDetail(it.id, li));
           li.querySelector('.del').addEventListener('click', (ev) => { ev.stopPropagation(); deleteItem(it.id, li); });
           listEl.appendChild(li);
         }
@@ -56,69 +77,121 @@
 
     async function loadDetail(id, liEl) {
       try {
-        // highlight
         document.querySelectorAll('#uploadList li').forEach(x => x.classList.remove('active'));
         if (liEl) liEl.classList.add('active');
+        
         const res = await fetch('/api/uploads/' + encodeURIComponent(id));
         if (!res.ok) {
           document.getElementById('detailView').innerText = 'Failed to load detail: ' + res.status;
           return;
         }
         const obj = await res.json();
-        document.getElementById('detailView').innerHTML = '<div class="VFmthsfk"><h3>Meta</h3>' +
+        
+        document.getElementById('detailView').innerHTML = '<h3>Metadata</h3>' +
           '<pre>' + JSON.stringify(obj.meta, null, 2) + '</pre>' +
-          '<h3>Data</h3><pre>' + JSON.stringify(obj.data, null, 2) + '</pre>' +
-          '<p><button id="delDetail" data-id="' + id + '">Delete this upload</button></p></div>';
-        const delBtn = document.getElementById('delDetail');
-        if (delBtn) delBtn.addEventListener('click', () => deleteItem(id, liEl));
+          '<h3>Data</h3><pre>' + JSON.stringify(obj.data, null, 2) + '</pre>';
+
       } catch (e) {
         console.error('Failed to load detail', e);
+        document.getElementById('detailView').innerHTML = '<p class="error">Could not load or parse details for this upload.</p>';
       }
     }
 
-    // auto-fetch list on load
-    fetchList();
-
-    // EventSource for server-sent events to auto-update the list
-    if (!!window.EventSource) {
-      const es = new EventSource('/events');
-      es.addEventListener('new', (e) => {
-        try {
-          const d = JSON.parse(e.data);
-          // prepend new item
-          const listEl = document.getElementById('uploadList');
-          const li = document.createElement('li');
-          li.dataset.id = d.id;
-          li.innerHTML = `<div class="list-row"><div class="meta"><strong>${d.summary}</strong><br/><small>${d.time}</small></div><div class="actions"><button data-id="${d.id}" class="del">Delete</button></div></div>`;
-          li.querySelector('.meta').addEventListener('click', () => loadDetail(d.id, li));
-          li.querySelector('.del').addEventListener('click', (ev) => { ev.stopPropagation(); deleteItem(d.id, li); });
-          if (listEl.firstChild) listEl.insertBefore(li, listEl.firstChild); else listEl.appendChild(li);
-        } catch (e) { console.error('Invalid SSE new data', e); }
-      });
-
-      es.addEventListener('deleted', (e) => {
-        try {
-          const d = JSON.parse(e.data);
-          const el = document.querySelector('#uploadList li[data-id="' + d.id + '"]');
-          if (el) el.remove();
-          const dv = document.getElementById('detailView');
-          if (dv && dv.querySelector && dv.querySelector('button') && dv.querySelector('button').dataset.id === d.id) {
-            dv.innerHTML = '<p>Select an upload on the left to see details.</p>';
-          }
-        } catch (e) { console.error('Invalid SSE deleted data', e); }
-      });
-    }
-
     async function deleteItem(id, liEl) {
-      if (!confirm('Delete this upload?')) return;
+      if (!confirm('Are you sure you want to delete this upload?')) return;
       try {
         const res = await fetch('/api/uploads/' + encodeURIComponent(id), { method: 'DELETE' });
-        if (!res.ok) { alert('Failed to delete'); return; }
-        if (liEl && liEl.remove) liEl.remove();
-        const dv = document.getElementById('detailView');
-        if (dv) dv.innerHTML = '<p>Select an upload on the left to see details.</p>';
-      } catch (e) { console.error('Delete failed', e); }
+        if (!res.ok) { 
+          alert('Failed to delete item.');
+          return; 
+        }
+        if (liEl) liEl.remove();
+
+        const detailView = document.getElementById('detailView');
+        const activeItem = document.querySelector('#uploadList li.active');
+        if (!activeItem) {
+            detailView.innerHTML = '<p>Select an upload on the left to see details.</p>';
+        }
+
+      } catch (e) { 
+        console.error('Delete failed', e); 
+        alert('An error occurred during deletion.');
+      }
     }
+
+    async function deleteAllItems() {
+      if (!confirm('Are you sure you want to delete all uploads?')) return;
+      try {
+        const res = await fetch('/api/uploads', { method: 'DELETE' });
+        if (!res.ok) {
+          alert('Failed to delete all items.');
+          return;
+        }
+      } catch (e) {
+        console.error('Delete all failed', e);
+        alert('An error occurred during deletion.');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchList();
+
+        document.getElementById('deleteAllBtn').addEventListener('click', deleteAllItems);
+
+        if (!!window.EventSource) {
+            const es = new EventSource('/events');
+            es.addEventListener('new', (e) => {
+                try {
+                    const d = JSON.parse(e.data);
+                    const listEl = document.getElementById('uploadList');
+                    const li = document.createElement('li');
+                    li.dataset.id = d.id;
+                    li.innerHTML = `<div class="list-row"><div class="meta"><strong>${d.summary || 'No Summary'}</strong><br/><small>${new Date(d.time).toLocaleString()}</small></div><div class="actions"><button data-id="${d.id}" class="del">Delete</button></div></div>`;
+                    li.addEventListener('click', () => loadDetail(d.id, li));
+                    li.querySelector('.del').addEventListener('click', (ev) => { ev.stopPropagation(); deleteItem(d.id, li); });
+                    
+                    const noItems = listEl.querySelector('li');
+                    if(noItems && noItems.innerText === 'No uploads yet'){
+                        listEl.innerHTML = '';
+                    }
+
+                    listEl.prepend(li);
+                } catch (err) { 
+                    console.error('Invalid SSE "new" data', err); 
+                }
+            });
+
+            es.addEventListener('deleted', (e) => {
+                try {
+                    const d = JSON.parse(e.data);
+                    const el = document.querySelector(`#uploadList li[data-id='${d.id}']`);
+                    if (el) el.remove();
+
+                    const detailView = document.getElementById('detailView');
+                    const activeItem = document.querySelector('#uploadList li.active');
+
+                    if (!activeItem) {
+                        detailView.innerHTML = '<p>Select an upload on the left to see details.</p>';
+                    }
+                    
+                    const listEl = document.getElementById('uploadList');
+                    if (listEl.children.length === 0) {
+                        listEl.innerHTML = '<li>No uploads yet</li>';
+                    }
+
+                } catch (err) { 
+                    console.error('Invalid SSE "deleted" data', err); 
+                }
+            });
+
+            es.addEventListener('deleted_all', (e) => {
+                const listEl = document.getElementById('uploadList');
+                listEl.innerHTML = '<li>No uploads yet</li>';
+                const detailView = document.getElementById('detailView');
+                detailView.innerHTML = '<p>Select an upload on the left to see details.</p>';
+            });
+        }
+    });
   </script>
 </body>
 </html>

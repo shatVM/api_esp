@@ -1,4 +1,38 @@
-{
-  "value": 1,
-  "device": "postman"
-}
+[
+  {
+    "device": {
+      "name": "POSTMAN",
+      "chipModel": "POSTMAN",
+      "chipRevision": 4,
+      "chipCores": 1,
+      "cpuFreqMHz": 160,
+      "flashSizeMB": 4,
+      "flashSpeedMHz": 80,
+      "flashMode": "QIO",
+      "heapSizeMB": 0.281879,
+      "freeHeapMB": 0.218628,
+      "minFreeHeapMB": 0.216343,
+      "maxAllocHeapMB": 0.199207,
+      "psramSizeMB": 0,
+      "freePsramMB": 0,
+      "sdkVersion": "v4.4.7-dirty",
+      "macAddress": "18:8B:0E:91:8E:3C",
+      "sketchSize": 950080,
+      "freeSketchSpace": 1310720,
+      "sketchMD5": "8026e15879382d493f15ceae1729fa74",
+      "uptimeSeconds": 8,
+      "resetReason": "Unknown"
+    },
+    "network": {
+      "ssid": "FreeZSTU",
+      "bssid": "6E:D7:9A:CD:26:04",
+      "rssi": -64,
+      "channel": 8,
+      "ip": "192.168.138.112",
+      "subnet": "255.255.240.0",
+      "gateway": "192.168.128.4",
+      "dns1": "195.69.223.138",
+      "status": 3
+    }
+  }
+]

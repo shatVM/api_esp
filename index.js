@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 80;
 
 // Increase limit if payloads may be large
 app.use(bodyParser.json({ limit: '256kb' }));
@@ -59,6 +59,10 @@ app.post('/upload', (req, res) => {
     } catch (jerr) {
       console.log('Failed to stringify upload payload:', jerr);
     }
+    // Логуємо тіло запиту
+    console.log(`[${new Date().toISOString()}] Request body for ${req.method} ${req.originalUrl}:`);
+    console.log(JSON.stringify(data, null, 2));
+
 
     const outPath = path.join(__dirname, 'received.json');
     fs.writeFileSync(outPath, JSON.stringify(data, null, 2), 'utf8');
@@ -187,6 +191,24 @@ app.get('/events', (req, res) => {
   res.write(': connected\n\n');
   sseClients.add(res);
   req.on('close', () => { sseClients.delete(res); });
+});
+
+// DELETE all uploads
+app.delete('/api/uploads', (req, res) => {
+  try {
+    const files = fs.readdirSync(UPLOAD_DIR);
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        fs.unlinkSync(path.join(UPLOAD_DIR, file));
+      }
+    }
+    console.log(`Deleted all upload files`);
+    sendSseEvent('deleted_all', {});
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Failed to delete all upload files:', e);
+    res.status(500).json({ error: 'failed to delete all' });
+  }
 });
 
 // DELETE an upload
