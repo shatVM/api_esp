@@ -86,7 +86,10 @@ app.post('/upload', (req, res) => {
   fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf8');
   console.log(`Saved upload record to ${filePath}`);
   // notify SSE clients about new upload
-  try { sendSseEvent('new', { id: filename, time: record.meta.time, summary: record.data?.device || record.data?.message || '' }); } catch (e) { }
+  try { 
+    const summary = record.data?.device ? `${record.data.device.name || ''} ${record.data.device.chipModel || ''}`.trim() : (record.data?.message || '');
+    sendSseEvent('new', { id: filename, time: record.meta.time, summary }); 
+  } catch (e) { }
   // include filename in response
   return res.status(200).json({ status: 'ok', savedTo: 'received.json', uploadFile: filename });
     } catch (wfErr) {
@@ -121,7 +124,7 @@ app.get('/view', (req, res) => {
         return {
           id: f,
           time: parsed?.meta?.time || null,
-          summary: parsed?.data?.device || parsed?.data?.message || ''
+          summary: (parsed?.data?.device ? `${parsed.data.device.name || ''} ${parsed.data.device.chipModel || ''}`.trim() : (parsed?.data?.message || ''))
         };
       } catch (e) {
         return { id: f, time: null, summary: '' };
@@ -145,7 +148,7 @@ app.get('/api/uploads', (req, res) => {
         return {
           id: f,
           time: parsed?.meta?.time || null,
-          summary: parsed?.data?.device || parsed?.data?.message || ''
+          summary: (parsed?.data?.device ? `${parsed.data.device.name || ''} ${parsed.data.device.chipModel || ''}`.trim() : (parsed?.data?.message || ''))
         };
       } catch (e) {
         return { id: f, time: null, summary: '' };

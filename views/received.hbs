@@ -4,7 +4,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ESP32 Receiver</title>
+  <title>ESP32 Receiver</title>  {{#if @root.isLocal}}
+  <title>LOCAL</title>
+  {{/if}}
+
   <link rel="stylesheet" href="/styles.css">
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
 </head>
@@ -31,7 +34,7 @@
                     <small>{{time}}</small>
                   </div>
                   <div class="actions">
-                    <button data-id="{{id}}" class="del">Delete</button>
+                    <button data-id="{{id}}" class="del">💥 Delete</button>
                   </div>
                 </div>
               </li>
@@ -65,7 +68,8 @@
         for (const it of items) {
           const li = document.createElement('li');
           li.dataset.id = it.id;
-          li.innerHTML = `<div class="list-row"><div class="meta"><strong>${it.device || 'No Summary'}</strong><br/><small>${new Date(it.time).toLocaleString()}</small></div><div class="actions"><button data-id="${it.id}" class="del">Delete</button></div></div>`;
+          console.log(it);
+          li.innerHTML = `<div class="list-row"><div class="meta"><strong>${it.id || 'No Summary'}</strong><br/><small>${new Date(it.time).toLocaleString()}</small></div><div class="actions"><button data-id="${it.id}" class="del">💥 Delete</button></div></div>`;
           li.addEventListener('click', () => loadDetail(it.id, li));
           li.querySelector('.del').addEventListener('click', (ev) => { ev.stopPropagation(); deleteItem(it.id, li); });
           listEl.appendChild(li);
@@ -73,6 +77,19 @@
       } catch (e) {
         console.error('Failed to fetch list', e);
       }
+    }
+
+    function jsonToTable(obj) {
+      let table = '<table>';
+      for (const key in obj) {
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+          table += `<tr><td><strong>${key}</strong></td><td>${jsonToTable(obj[key])}</td></tr>`;
+        } else {
+          table += `<tr><td><strong>${key}</strong></td><td>${obj[key]}</td></tr>`;
+        }
+      }
+      table += '</table>';
+      return table;
     }
 
     async function loadDetail(id, liEl) {
@@ -86,10 +103,13 @@
           return;
         }
         const obj = await res.json();
-        
-        document.getElementById('detailView').innerHTML = '<h3>Metadata</h3>' +
-          '<pre>' + JSON.stringify(obj.meta, null, 2) + '</pre>' +
-          '<h3>Data</h3><pre>' + JSON.stringify(obj.data, null, 2) + '</pre>';
+        console.log(obj);
+        let detailHtml = '<h3>Metadata</h3>' +
+          '<pre>' + jsonToTable(obj.meta) + '</pre>';
+
+      detailHtml += '<pre>' + jsonToTable(obj.data) + '</pre>';
+
+        document.getElementById('detailView').innerHTML = detailHtml;
 
       } catch (e) {
         console.error('Failed to load detail', e);
@@ -146,7 +166,8 @@
                     const listEl = document.getElementById('uploadList');
                     const li = document.createElement('li');
                     li.dataset.id = d.id;
-                    li.innerHTML = `<div class="list-row"><div class="meta"><strong>${d.summary || 'No Summary'}</strong><br/><small>${new Date(d.time).toLocaleString()}</small></div><div class="actions"><button data-id="${d.id}" class="del">Delete</button></div></div>`;
+                    console.log(d);
+                    li.innerHTML = `<div class="list-row"><div class="meta"><strong>${d.id || 'No Summary'}</strong><br/><small>${new Date(d.time).toLocaleString()}</small></div><div class="actions"><button data-id="${d.id}" classc="del">Delete</button></div></div>`;
                     li.addEventListener('click', () => loadDetail(d.id, li));
                     li.querySelector('.del').addEventListener('click', (ev) => { ev.stopPropagation(); deleteItem(d.id, li); });
                     
