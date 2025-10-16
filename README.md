@@ -31,3 +31,5 @@ ipconfig | Select-String "IPv4" -SimpleMatch
 Then copy the IPv4 address and replace <YOUR_PC_IP> in the firmware constant.
 
 When the ESP posts JSON it will be printed to the console and saved to `received.json` in this folder.
+
+https://api-esp-tnww.onrender.com/view
