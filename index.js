@@ -54,14 +54,14 @@ app.post('/upload', (req, res) => {
     // Log a concise preview plus full JSON at debug level
     try {
       const preview = JSON.stringify(data).slice(0, 1000);
-      console.log('Upload preview:', preview + (preview.length >= 1000 ? '... (truncated)' : ''));
-      console.log('Full payload:', JSON.stringify(data, null, 2));
+      // console.log('Upload preview:', preview + (preview.length >= 1000 ? '... (truncated)' : ''));
+      // console.log('Full payload:', JSON.stringify(data, null, 2));
     } catch (jerr) {
       console.log('Failed to stringify upload payload:', jerr);
     }
     // Логуємо тіло запиту
-    console.log(`[${new Date().toISOString()}] Request body for ${req.method} ${req.originalUrl}:`);
-    console.log(JSON.stringify(data, null, 2));
+    // console.log(`[${new Date().toISOString()}] Request body for ${req.method} ${req.originalUrl}:`);
+    // console.log(JSON.stringify(data, null, 2));
 
 
     const outPath = path.join(__dirname, 'received.json');
@@ -87,8 +87,46 @@ app.post('/upload', (req, res) => {
   console.log(`Saved upload record to ${filePath}`);
   // notify SSE clients about new upload
   try { 
-    const summary = record.data?.device ? `${record.data.device.name || ''} ${record.data.device.chipModel || ''}`.trim() : (record.data?.message || '');
-    sendSseEvent('new', { id: filename, time: record.meta.time, summary }); 
+    // Перетворюємо дані в потрібний формат
+    const deviceInfo = {
+      name: record.data?.device || 'Unknown Device',
+      chipModel: 'ESP',
+      cpuFreqMHz: null,
+      flashSizeMB: null,
+      sdkVersion: null,
+      macAddress: null
+    };
+
+    const networkInfo = {
+      ip: record.data?.ip || null,
+      ssid: null,
+      rssi: record.data?.rssi_dbm || null,
+      channel: null
+    };
+
+    // Формуємо summary
+    const summaryParts = [
+      deviceInfo.name,
+      `IP: ${networkInfo.ip || 'Unknown'}`,
+      networkInfo.rssi !== null ? `RSSI: ${networkInfo.rssi}dBm` : null
+    ].filter(Boolean);
+
+    sendSseEvent('new', { 
+      id: filename, 
+      time: record.meta.time, 
+      device: deviceInfo,
+      network: networkInfo,
+      summary: summaryParts.join(' '),
+      sensors: {
+        lux: record.data?.lux,
+        temperature_aht: record.data?.temperature_aht_c,
+        humidity_aht: record.data?.humidity_aht_pct,
+        temperature_dht: record.data?.temperature_dht_c,
+        humidity_dht: record.data?.humidity_dht_pct,
+        battery: record.data?.battery_v,
+        uptime: record.data?.uptime_ms
+      }
+    }); 
   } catch (e) { }
   // include filename in response
   return res.status(200).json({ status: 'ok', savedTo: 'received.json', uploadFile: filename });
@@ -124,7 +162,9 @@ app.get('/view', (req, res) => {
         return {
           id: f,
           time: parsed?.meta?.time || null,
-          summary: (parsed?.data?.device ? `${parsed.data.device.name || ''} ${parsed.data.device.chipModel || ''}`.trim() : (parsed?.data?.message || ''))
+          summary: (parsed?.data?.device ? `${parsed.data.device.name || ''} ${parsed.data.device.chipModel || ''}`.trim() : (parsed?.data?.message || '')),
+          device: parsed?.data?.device || {},
+          network: parsed?.data?.network || {}
         };
       } catch (e) {
         return { id: f, time: null, summary: '' };
@@ -137,24 +177,79 @@ app.get('/view', (req, res) => {
   return res.render('received', { exists: true, list });
 });
 
-// API: list uploads
+// API: list uploads with pagination
 app.get('/api/uploads', (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const start = (page - 1) * limit;
+
     const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
     const list = files.map(f => {
       try {
         const raw = fs.readFileSync(path.join(UPLOAD_DIR, f), 'utf8');
         const parsed = JSON.parse(raw);
+        // Read the full data object for device and network info
+        // Перетворюємо дані в потрібний формат
+        const deviceInfo = {
+          name: parsed?.data?.device || 'Unknown Device',
+          chipModel: 'ESP',
+          cpuFreqMHz: null,
+          flashSizeMB: null,
+          sdkVersion: null,
+          macAddress: null
+        };
+
+        const networkInfo = {
+          ip: parsed?.data?.ip || null,
+          ssid: null,
+          rssi: parsed?.data?.rssi_dbm || null,
+          channel: null
+        };
+
+        // Формуємо summary з доступних даних
+        const summaryParts = [
+          deviceInfo.name,
+          `IP: ${networkInfo.ip || 'Unknown'}`,
+          networkInfo.rssi !== null ? `RSSI: ${networkInfo.rssi}dBm` : null
+        ].filter(Boolean);
+
         return {
           id: f,
           time: parsed?.meta?.time || null,
-          summary: (parsed?.data?.device ? `${parsed.data.device.name || ''} ${parsed.data.device.chipModel || ''}`.trim() : (parsed?.data?.message || ''))
+          device: deviceInfo,
+          network: networkInfo,
+          summary: summaryParts.join(' '),
+          // Додаємо сенсорні дані
+          sensors: {
+            lux: parsed?.data?.lux,
+            temperature_aht: parsed?.data?.temperature_aht_c,
+            humidity_aht: parsed?.data?.humidity_aht_pct,
+            temperature_dht: parsed?.data?.temperature_dht_c,
+            humidity_dht: parsed?.data?.humidity_dht_pct,
+            battery: parsed?.data?.battery_v,
+            uptime: parsed?.data?.uptime_ms
+          }
         };
       } catch (e) {
-        return { id: f, time: null, summary: '' };
+        return { id: f, time: null, device: {}, network: {}, summary: '' };
       }
     }).sort((a,b) => (b.time || '').localeCompare(a.time || ''));
-    res.json(list);
+
+    // Calculate pagination
+    const totalItems = list.length;
+    const totalPages = Math.ceil(totalItems / limit);
+    const paginatedList = list.slice(start, start + limit);
+
+    res.json({
+      items: paginatedList,
+      pagination: {
+        page,
+        limit,
+        totalItems,
+        totalPages
+      }
+    });
   } catch (e) {
     console.error('Failed to list uploads:', e);
     res.status(500).json({ error: 'failed to list uploads' });

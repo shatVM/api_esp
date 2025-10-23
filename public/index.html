@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Моніторинг ESP8266 | Панель Датчиків</title>
+    <!-- Tailwind CSS CDN --><script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDN --><script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom styles for the flip effect */
+        .sensor-card {
+            perspective: 1000px;
+            cursor: pointer;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            height: 300px; /* Збільшена фіксована висота картки */
+            min-height: 300px; /* Мінімальна висота для гнучкості */
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .sensor-card:hover .card-inner,
+        .sensor-card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden; /* Safari */
+            backface-visibility: hidden;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* Додатково, щоб уникнути руйнування дизайну, якщо вміст дуже довгий */
+            min-height: 300px; 
+        }
+        .card-back {
+            transform: rotateY(180deg);
+        }
+        .data-active-bg {
+             /* Light blue background for active cards */
+            background-color: #e0f2fe; /* blue-50 */
+        }
+        .data-inactive-bg {
+            /* Light gray background for inactive cards */
+            background-color: #f3f4f6; /* gray-100 */
+        }
+        
+        @keyframes spin-once {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .animate-spin-once {
+            animation: spin-once 0.8s ease-in-out;
+        }
+        /* Адаптуємо grid для мобільного вигляду, щоб вмістити всі картки */
+        @media (min-width: 640px) {
+            #sensorGrid {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+    <!-- Header --><header class="bg-white shadow-md sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center">
+            <h1 class="text-2xl font-extrabold text-gray-900 flex items-center mb-4 sm:mb-0">
+                <i data-lucide="gauge" class="w-6 h-6 mr-3 text-sky-600"></i>
+                Панель Моніторингу ESP8266
+            </h1>
+            <button id="refreshButton" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-full transition duration-150 ease-in-out shadow-lg flex items-center disabled:opacity-50">
+                <i data-lucide="rotate-cw" class="w-5 h-5 mr-2"></i>
+                Оновити дані (Симуляція)
+            </button>
+            <a href="/view" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-full transition duration-150 ease-in-out shadow-lg flex items-center">
+                <i data-lucide="database" class="w-5 h-5 mr-2"></i>
+                Переглянути Отримані Дані
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content: Module Selector and Sensor Grid --><main class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        
+        <!-- Module Selector --><div class="mb-8 p-4 bg-white rounded-xl shadow-lg border border-gray-100">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Обрати Модуль ESP:</h2>
+            <div id="moduleSelector" class="flex flex-wrap gap-4">
+                <!-- Модулі генеруються динамічно з об'єкта moduleConfig --></div>
+        </div>
+
+        <h2 id="currentModuleTitle" class="text-3xl font-bold text-gray-800 mb-6">Датчики Модуля ESP-01 (Кімната)</h2>
+        
+        <!-- Sensor Cards Container --><div id="sensorGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Sensor Cards will be injected here by JavaScript --></div>
+        
+        <div id="loadingIndicator" class="text-center mt-10 hidden">
+             <i data-lucide="loader-circle" class="w-12 h-12 text-sky-500 animate-spin mx-auto"></i>
+             <p class="text-lg text-gray-600 mt-3">Оновлення даних...</p>
+        </div>
+
+
+        <p class="mt-8 text-center text-gray-500 text-sm" id="lastUpdateTime">Останнє оновлення: --</p>
+    </main>
+
+    <!-- Footer --><footer class="bg-white mt-12 border-t border-gray-100">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 text-center text-gray-500 text-sm">
+            &copy; 2024 ESP8266 Dashboard. Симуляція даних.
+        </div>
+    </footer>
+
+    <script>
+        // Глобальна конфігурація та ініціалізація
+        document.addEventListener('DOMContentLoaded', () => {
+            const sensorGrid = document.getElementById('sensorGrid');
+            const refreshButton = document.getElementById('refreshButton');
+            const lastUpdateTimeElement = document.getElementById('lastUpdateTime');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const moduleSelector = document.getElementById('moduleSelector');
+            const currentModuleTitle = document.getElementById('currentModuleTitle');
+            
+            // Ваш API ключ для OpenWeatherMap
+            const API_KEY = '1bc233e3498c696ecb492a89b4803be8';
+
+            // --- 1. Структура Даних Датчиків (Гнучка кількість) ---
+            const sensorsData = {
+                'temp': { name: 'Температура', unit: '°C', icon: 'thermometer', description: 'Температура повітря.', detailed_description: 'Вимірювання температури з використанням датчика DHT22/DS18B20.' },
+                'humid': { name: 'Вологість', unit: '%', icon: 'droplets', description: 'Відносна вологість повітря.', detailed_description: 'Вимірювання відносної вологості повітря за допомогою датчика DHT22/BME280.' },
+                'press': { name: 'Тиск', unit: 'гПа', icon: 'gauge', description: 'Атмосферний тиск.', detailed_description: 'Вимірювання атмосферного тиску (гектопаскалі) з використанням датчика BMP180/BME280.' },
+                'light': { name: 'Освітленість', unit: 'лк', icon: 'sun', description: 'Рівень освітленості.', detailed_description: 'Вимірювання інтенсивності світла в люксах за допомогою BH1750.' },
+                'motion': { name: 'Рух', unit: '', icon: 'zap', description: 'Виявлення руху в зоні контролю.', detailed_description: 'Стан інфрачервоного (PIR) датчика руху. "Виявлено" або "Немає руху".' },
+                'soil': { name: 'Вологість ґрунту', unit: '%', icon: 'leaf', description: 'Рівень вологості ґрунту для рослин.', detailed_description: 'Аналогове вимірювання вологості ґрунту. 0% — сухо, 100% — мокро.' },
+                'co2': { name: 'Якість Повітря', unit: 'ppm', icon: 'cloud-lightning', description: 'Концентрація CO2/Летких органічних сполук.', detailed_description: 'Вимірювання еквівалентної концентрації CO2 (eCO2) або ЛОС (VOC) за допомогою датчика MQ-135/BME680.' },
+                'voltage': { name: 'Напруга Батареї', unit: 'В', icon: 'battery-charging', description: 'Поточна напруга живлення ESP.', detailed_description: 'Моніторинг напруги, якщо пристрій живиться від батареї (вимірюється через ADC).' },
+                'pulse': { name: 'Лічильник Імпульсів', unit: 'імпульсів', icon: 'activity', description: 'Кількість подій, напр. з лічильника води/газу.', detailed_description: 'Рахує кількість імпульсів з моменту останнього скидання.' }
+            };
+
+            // --- 2. Управління Станом Модулів (Структурований Об'єкт) ---
+            let currentModuleId = 'esp1';
+            
+            // Новий об'єкт конфігурації модулів, який використовується для генерації меню.
+            const moduleConfig = {
+                // Внутрішні модулі з локальними IP/API
+                'esp1': { name: 'ESP-01 (Кімната)', icon: 'microscope', link: 'http://192.168.1.10/data', description: 'Моніторинг температури та руху в житловій кімнаті.' },
+                'esp2': { name: 'ESP-02 (Вулиця)', icon: 'route', link: 'https://api.myiot.com/outdoor', description: 'Зовнішні показники: атмосферний тиск та освітленість.' },
+                'esp3': { name: 'ESP-03 (Серверна)', icon: 'server', link: 'http://10.0.0.5/readings', description: 'Контроль CO2, тиску та вологості для обладнання.' },
+                
+                // Модулі, що використовують реальні публічні джерела даних (OneCall 3.0)
+                'esp4': { 
+                    name: 'ESP-04 (Житомир) [OpenWeather]', 
+                    icon: 'zap', 
+                    // Lat: 50.26, Lon: 28.66 для Житомира
+                    link: `https://api.openweathermap.org/data/3.0/onecall?lat=50.26&lon=28.66&exclude=minutely,hourly,daily,alerts&appid=${API_KEY}&units=metric`, 
+                    description: 'Поточна погода (T, H, P) для Житомира через OpenWeatherMap OneCall 3.0 API.' 
+                }, 
+                'esp5': { 
+                    name: 'ESP-05 (Київ) [OpenWeather]', 
+                    icon: 'cloud', 
+                    // Lat: 50.45, Lon: 30.52 для Києва
+                    link: `https://api.openweathermap.org/data/3.0/onecall?lat=50.45&lon=30.52&exclude=minutely,hourly,daily,alerts&appid=${API_KEY}&units=metric`, 
+                    description: 'Поточна погода (T, H, P) для Києва через OpenWeatherMap OneCall 3.0 API.' 
+                }, 
+            };
+
+            // Кеш для збереження останніх симульованих/реальних даних кожного модуля
+            let moduleCache = {}; 
+            // Ініціалізація кешу на основі ключів moduleConfig
+            Object.keys(moduleConfig).forEach(id => moduleCache[id] = null);
+            
+            // --- 3. Функції Симуляції та Отримання Реальних Даних ---
+
+            /**
+             * Генерує повний набір даних для всіх датчиків обраного модуля.
+             * Ця функція також використовується як резервна при помилці API.
+             * @param {string} moduleId - ID модуля.
+             * @returns {object} Об'єкт з даними для кожного датчика.
+             */
+            function generateModuleData(moduleId) {
+                const data = {};
+                const now = new Date().getTime();
+                
+                Object.keys(sensorsData).forEach(id => {
+                    // Шанс 15%, що дані будуть відсутні
+                    if (Math.random() < 0.15) {
+                        data[id] = null;
+                        return;
+                    }
+
+                    let value;
+                    switch (id) {
+                        case 'temp':
+                            // Різні діапазони симуляції
+                            if (moduleId === 'esp1') value = (Math.random() * (25 - 20) + 20).toFixed(1);
+                            else if (moduleId === 'esp2') value = (Math.random() * (35 - 15) + 15).toFixed(1);
+                            else if (moduleId === 'esp3') value = (Math.random() * (22 - 18) + 18).toFixed(1);
+                            else if (['esp4', 'esp5'].includes(moduleId)) value = (Math.random() * (26 - 15) + 15).toFixed(1);
+                            else value = (Math.random() * (24 - 19) + 19).toFixed(1); 
+                            break;
+                        case 'humid':
+                            const maxHumid = ['esp4', 'esp5'].includes(moduleId) ? 90 : (moduleId === 'esp3' ? 55 : 80);
+                            value = Math.floor(Math.random() * (maxHumid - 30) + 30);
+                            break;
+                        case 'press':
+                            value = Math.floor(Math.random() * (1030 - 980) + 980);
+                            break;
+                        case 'light':
+                            const maxLight = moduleId === 'esp2' ? 1200 : 500;
+                            value = Math.floor(Math.random() * (maxLight - 50) + 50);
+                            break;
+                        case 'motion':
+                            value = Math.random() < (moduleId === 'esp1' ? 0.3 : 0.05) ? 'Виявлено' : 'Немає руху';
+                            break;
+                        case 'soil':
+                            value = Math.floor(Math.random() * (85 - 20) + 20);
+                            break;
+                        case 'co2':
+                            const minCo2 = moduleId === 'esp3' ? 600 : 400;
+                            value = Math.floor(Math.random() * (1200 - minCo2) + minCo2);
+                            break;
+                        case 'voltage':
+                            value = (Math.random() * (4.2 - 3.0) + 3.0).toFixed(2);
+                            break;
+                        case 'pulse':
+                            value = Math.floor(Math.random() * 5000);
+                            break;
+                        default:
+                            value = 'N/A';
+                    }
+
+                    data[id] = {
+                        value: value,
+                        last_updated: now, 
+                        isActive: true,
+                    };
+                });
+                
+                return data;
+            }
+
+            /**
+             * Отримує реальні дані з API OpenWeatherMap та мапує їх на структуру датчиків.
+             * @param {string} moduleId - ID зовнішнього модуля.
+             * @returns {Promise<object>} Мапована структура даних або симульовані дані в разі помилки.
+             */
+            async function fetchRealData(moduleId) {
+                const config = moduleConfig[moduleId];
+                const url = config.link;
+                const now = new Date().getTime();
+                
+                // Генеруємо симульовані дані як основу для не-погодних датчиків
+                const simulatedData = generateModuleData(moduleId);
+                const resultData = { ...simulatedData }; 
+
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        // Якщо API повертає помилку, кидаємо її для обробки в catch
+                        throw new Error(`Помилка HTTP: ${response.status}. Перевірте ключ API та ліміти.`);
+                    }
+                    const apiData = await response.json();
+                    
+                    const current = apiData.current;
+                    if (!current) {
+                         throw new Error("Відсутні поточні дані (current) у відповіді API.");
+                    }
+
+                    // Мапування реальних даних на формат датчиків
+                    resultData['temp'] = {
+                        value: current.temp.toFixed(1), // Температура в Celsius
+                        last_updated: now,
+                        isActive: true
+                    };
+                    
+                    resultData['humid'] = {
+                        value: current.humidity, // Вологість у %
+                        last_updated: now,
+                        isActive: true
+                    };
+
+                    resultData['press'] = {
+                        // Тиск у hPa
+                        value: current.pressure, 
+                        last_updated: now,
+                        isActive: true
+                    };
+
+                    console.log(`[OK] Успішно отримано реальні дані для ${config.name}.`);
+                    return resultData;
+
+                } catch (error) {
+                    console.error(`[ERROR] Помилка отримання реальних даних для ${config.name}. Використовується симуляція T/H/P.`, error.message);
+                    // У разі помилки, повертаємо симуляцію, але встановлюємо T/H/P як неактивні для індикації помилки API
+                    const fallbackData = generateModuleData(moduleId);
+                    ['temp', 'humid', 'press'].forEach(id => {
+                        fallbackData[id].isActive = false; // Позначаємо дані як неактивні через помилку API
+                        // fallbackData[id].value = fallbackData[id].value; // Залишаємо симульоване значення
+                    });
+
+                    return fallbackData;
+                }
+            }
+            
+            /**
+             * Отримує дані для модуля з кешу або генерує нові.
+             */
+            function getOrSimulateData(moduleId) {
+                if (!moduleCache[moduleId]) {
+                    moduleCache[moduleId] = generateModuleData(moduleId);
+                }
+                return moduleCache[moduleId];
+            }
+
+
+            // --- 4. Рендеринг та Обробка UI ---
+
+            /**
+             * Створює HTML-код для картки датчика.
+             */
+            function createSensorCard(sensor, data) {
+                const isActive = data && data.isActive;
+                const unit = (sensor.id === 'motion' && data?.value === 'Виявлено') || (data?.value === 'Немає руху') ? '' : sensor.unit;
+                const valueDisplay = data ? `${data.value}${unit ? ' ' + unit : ''}` : '—';
+                
+                const statusText = isActive ? 'Дані актуальні' : 'Немає даних / Помилка';
+                const statusColor = isActive ? 'text-sky-600' : 'text-gray-500';
+                const iconColor = isActive ? 'text-sky-500' : 'text-gray-400';
+                const cardBgClass = isActive ? 'data-active-bg hover:shadow-xl' : 'data-inactive-bg';
+                const lastUpdatedText = data ? new Date(data.last_updated).toLocaleTimeString('uk-UA') : 'Н/Д';
+
+                const sourceLink = moduleConfig[currentModuleId].link; 
+                const isExternalModule = ['esp4', 'esp5'].includes(currentModuleId);
+                const linkDisplay = isExternalModule ? sourceLink.replace(API_KEY, '{YOUR_API_KEY}') : sourceLink; 
+
+                return `
+                    <div id="card-${sensor.id}" class="sensor-card" onclick="toggleFlip(this)">
+                        <div class="card-inner">
+                            
+                            <!-- Card Front (Коротка інформація) --><div class="card-front ${cardBgClass} transition duration-300 ease-in-out">
+                                <i data-lucide="${sensor.icon}" class="w-10 h-10 mb-3 ${iconColor} flex-shrink-0"></i>
+                                <h3 class="text-lg font-semibold text-gray-900 mb-1">${sensor.name}</h3>
+                                <p class="text-sm ${statusColor} mb-4">${statusText}</p>
+                                
+                                <div class="text-4xl font-extrabold text-gray-800">
+                                    ${valueDisplay}
+                                </div>
+                                <p class="text-xs text-gray-400 mt-auto">Опис: ${sensor.description}</p>
+                            </div>
+
+                            <!-- Card Back (Детальна інформація) --><div class="card-back bg-white border border-gray-200">
+                                <h3 class="text-xl font-bold text-sky-600 mb-2">${sensor.name}</h3>
+                                <p class="text-sm text-gray-700 text-left w-full mb-4">
+                                    ${sensor.detailed_description}
+                                </p>
+                                <div class="bg-gray-50 p-3 rounded-lg w-full">
+                                    <div class="flex justify-between text-sm text-gray-600">
+                                        <span>Поточне значення:</span>
+                                        <span class="font-bold text-gray-800">${valueDisplay}</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs text-gray-500 mt-2">
+                                        <span>Оновлено:</span>
+                                        <span>${lastUpdatedText}</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Додано посилання на джерело даних --><div class="bg-gray-100 p-3 rounded-lg w-full mt-3 border border-gray-200 text-left">
+                                    <span class="text-xs font-semibold text-gray-600 block mb-1">Джерело даних модуля (API URL):</span>
+                                    <p class="text-xs text-sky-700 font-medium break-words block" title="${sourceLink}">
+                                        ${linkDisplay}
+                                    </p>
+                                    ${isExternalModule ? '<p class="text-xs text-green-600 mt-1"> * Використовується API OpenWeatherMap. Дані T/H/P можуть бути реальними.</p>' : ''}
+                                </div>
+                                <!-- Кінець посилання на джерело даних --><p class="text-xs text-gray-400 mt-4">Натисніть для повернення</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            /**
+             * Оновлює вигляд кнопок перемикання модуля та генерує їх, якщо потрібно.
+             */
+            function updateModuleButtons() {
+                // 1. Динамічна генерація кнопок
+                if (moduleSelector.innerHTML === '' || moduleSelector.children.length !== Object.keys(moduleConfig).length) {
+                    let buttonsHtml = '';
+                    Object.keys(moduleConfig).forEach(id => {
+                        const module = moduleConfig[id];
+                        buttonsHtml += `
+                            <button data-module-id="${id}" class="module-button flex-1 min-w-[120px] py-3 px-6 rounded-lg text-lg font-semibold transition duration-150 ease-in-out">
+                                <i data-lucide="${module.icon}" class="w-5 h-5 mr-2 inline-block"></i> ${module.name}
+                            </button>
+                        `;
+                    });
+                    moduleSelector.innerHTML = buttonsHtml;
+                    lucide.createIcons();
+                }
+
+                // 2. Оновлення стилів
+                document.querySelectorAll('.module-button').forEach(btn => {
+                    const moduleId = btn.dataset.moduleId;
+                    if (moduleId === currentModuleId) {
+                        btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                        btn.classList.add('bg-sky-600', 'text-white', 'hover:bg-sky-700', 'shadow-md');
+                    } else {
+                        btn.classList.remove('bg-sky-600', 'text-white', 'hover:bg-sky-700', 'shadow-md');
+                        btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                    }
+                });
+
+                // 3. Оновлення заголовка та кнопки оновлення
+                currentModuleTitle.textContent = `Датчики Модуля ${moduleConfig[currentModuleId].name}`;
+                const isExternal = ['esp4', 'esp5'].includes(currentModuleId);
+                refreshButton.textContent = isExternal ? 'Оновити дані (API)' : 'Оновити дані (Симуляція)';
+            }
+            
+            /**
+             * Функція перемикання модуля.
+             */
+            function switchModule(moduleId) {
+                currentModuleId = moduleId;
+                renderSensors(false); // Відображаємо кеш
+            }
+
+
+            /**
+             * Головна функція рендерингу.
+             * @param {boolean} shouldRefresh - Чи потрібно примусово генерувати/отримувати нові дані.
+             */
+            async function renderSensors(shouldRefresh = false) {
+                const isExternalModule = ['esp4', 'esp5'].includes(currentModuleId);
+                
+                refreshButton.disabled = true;
+                loadingIndicator.classList.remove('hidden');
+                sensorGrid.innerHTML = ''; 
+                
+                let moduleReadouts;
+
+                if (shouldRefresh) {
+                    if (isExternalModule) {
+                        // Спроба отримати реальні дані. Якщо не вдасться, повернеться симуляція.
+                        moduleReadouts = await fetchRealData(currentModuleId); 
+                    } else {
+                        // Локальна симуляція
+                        moduleReadouts = generateModuleData(currentModuleId);
+                    }
+                    moduleCache[currentModuleId] = moduleReadouts; // Кешуємо новий результат
+                } else {
+                    // Використовуємо кешовані дані
+                    moduleReadouts = getOrSimulateData(currentModuleId);
+                }
+                
+                // 1. Рендеринг карток
+                Object.keys(sensorsData).forEach(id => {
+                    const sensorConfig = sensorsData[id];
+                    const data = moduleReadouts[id];
+                    
+                    const sensor = { ...sensorConfig, id }; 
+                    
+                    const cardHtml = createSensorCard(sensor, data);
+                    sensorGrid.innerHTML += cardHtml;
+                });
+
+                // 2. Фінальні кроки
+                lucide.createIcons();
+                lastUpdateTimeElement.textContent = `Останнє оновлення: ${new Date().toLocaleTimeString('uk-UA')} (Модуль ${moduleConfig[currentModuleId].name})`;
+                loadingIndicator.classList.add('hidden');
+                refreshButton.disabled = false;
+                
+                updateModuleButtons();
+            }
+
+            // Додати функцію перегортання до глобальної області видимості
+            window.toggleFlip = function(element) {
+                element.classList.toggle('flipped');
+            };
+
+            // --- 5. Ініціалізація та Обробники Подій ---
+
+            // Обробник кнопок перемикання модуля
+            moduleSelector.addEventListener('click', (event) => {
+                const target = event.target.closest('.module-button');
+                if (target) {
+                    switchModule(target.dataset.moduleId);
+                }
+            });
+
+            // Обробник кнопки оновлення
+            refreshButton.addEventListener('click', async () => {
+                refreshButton.classList.add('opacity-75', 'animate-spin-once');
+                
+                // Симуляція затримки для кращої візуалізації
+                const delay = ['esp4', 'esp5'].includes(currentModuleId) ? 500 : 300; 
+                await new Promise(resolve => setTimeout(resolve, delay)); 
+
+                await renderSensors(true); // Примусово оновити дані
+                refreshButton.classList.remove('opacity-75', 'animate-spin-once');
+            });
+            
+            // Початкове завантаження
+            renderSensors(true); // Примусово генеруємо/отримуємо дані при першому запуску
+        });
+
+    </script>
+</body>
+</html>
