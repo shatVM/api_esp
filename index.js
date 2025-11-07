@@ -291,7 +291,7 @@ app.delete('/api/uploads/:name', (req, res) => {
 const PINS_STATE_FILE = path.join(__dirname, 'pins.json');
 
 // Endpoint to get the current state of all pins
-app.get('/api/pins', (req, res) => {
+app.get('/pinstate', (req, res) => {
   try {
     if (fs.existsSync(PINS_STATE_FILE)) {
       const state = fs.readFileSync(PINS_STATE_FILE, 'utf8');

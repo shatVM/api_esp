@@ -33,6 +33,29 @@
               <input type="checkbox" id="pin6Switch" />
               <span class="slider">6 PIN</span>
             </label>
+             <label class="switch">
+              <input type="checkbox" id="pin7Switch" />
+              <span class="slider">7 PIN</span>
+            </label>
+          </div>
+          <div id="PINControl">
+            <h2>PIN State</h2>
+            {{! додати перемикач який на сервер буде відправляти 1 або 0 }}
+            {{! додати блок який буде показувати стан кожного кольором червоний/зелений з PIN з сервера отрисуючи дані з запита на ендпоінт /pinstate  }}
+            <div id="pinState">
+              <div class="pin" data-pin="pin5">
+                <span class="pin-label">5 PIN</span>
+                <span class="pin-status red">OFF</span>
+              </div>
+              <div class="pin" data-pin="pin6">
+                <span class="pin-label">6 PIN</span>
+                <span class="pin-status green">ON</span>
+              </div>
+              <div class="pin" data-pin="pin7">
+                <span class="pin-label">7 PIN</span>
+                <span class="pin-status red">OFF</span>
+              </div>
+            </div>
           </div>
           <div
             style="display: flex; justify-content: space-between; align-items: center;"
@@ -138,8 +161,6 @@
         </section>
       </div>
     </div>
-
-
 
   </body>
   <script src="js/script.js"></script>

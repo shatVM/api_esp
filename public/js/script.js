@@ -364,7 +364,53 @@ async function deleteAllItems() {
     }
 }
 
+/**
+ * Завантажує стан пінів і оновлює UI.
+ */
+async function fetchPinStates() {
+    try {
+        const res = await fetch('/pinstate');
+        if (!res.ok) {
+            throw new Error('Network response not ok: ' + res.status);
+        }
+        const states = await res.json();
+        renderPinStates(states);
+    } catch (e) {
+        console.error('Failed to fetch pin states', e);
+    }
+}
+
+/**
+ * Оновлює UI для відображення стану пінів.
+ * @param {object} states - Об'єкт зі станами пінів.
+ */
+function renderPinStates(states) {
+    const pinStateContainer = document.getElementById('pinState');
+    if (!pinStateContainer) {
+        return;
+    }
+
+    for (const pin in states) {
+        const pinElement = pinStateContainer.querySelector(`[data-pin="${pin}"]`);
+        if (pinElement) {
+            const statusElement = pinElement.querySelector('.pin-status');
+            if (statusElement) {
+                if (states[pin] === 1) {
+                    statusElement.textContent = 'ON';
+                    statusElement.classList.remove('red');
+                    statusElement.classList.add('green');
+                } else {
+                    statusElement.textContent = 'OFF';
+                    statusElement.classList.remove('green');
+                    statusElement.classList.add('red');
+                }
+            }
+        }
+    }
+}
+
 // --- Ініціалізація та обробники подій DOMContentLoaded ---
+
 
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Налаштування кількості елементів на сторінці
@@ -382,6 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Початкове завантаження списку
     fetchList(1, itemsPerPage);
+    fetchPinStates();
 
     // 3. Налаштування обробників пагінації
     const prevBtn = document.getElementById('prevPage');
@@ -466,6 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Оновлюємо загальну кількість та пагінацію
                 totalItems++;
                 updatePagination(currentPage);
+                fetchPinStates();
             } catch (err) {
                 console.error('Invalid SSE "new" data', err);
             }
@@ -494,6 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Зменшуємо загальну кількість та оновлюємо пагінацію
                 totalItems--;
                 updatePagination(currentPage);
+                fetchPinStates();
             } catch (err) {
                 console.error('Invalid SSE "deleted" data', err);
             }
@@ -530,7 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const switches = pinControl.querySelectorAll('input[type="checkbox"]');
 
         // Завантаження початкових станів
-        fetch('/api/pins')
+        fetch('/pinstate')
             .then(res => res.json())
             .then(states => {
                 switches.forEach(switchEl => {
@@ -565,6 +614,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 .then(data => {
                     if (data.status !== 'ok') {
                         console.error(`Failed to update pin ${pin} state. Response:`, data);
+                    } else {
+                        fetchPinStates();
                     }
                 })
                 .catch(err => {
