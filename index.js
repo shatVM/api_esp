@@ -87,47 +87,8 @@ app.post('/upload', (req, res) => {
   console.log(`Saved upload record to ${filePath}`);
   // notify SSE clients about new upload
   try { 
-    // Перетворюємо дані в потрібний формат
-    const deviceInfo = {
-      name: record.data?.device || 'Unknown Device',
-      chipModel: 'ESP',
-      cpuFreqMHz: null,
-      flashSizeMB: null,
-      sdkVersion: null,
-      macAddress: null
-    };
-
-    const networkInfo = {
-      ip: record.data?.ip || null,
-      ssid: null,
-      rssi: record.data?.rssi_dbm || null,
-      channel: null
-    };
-
-    // Формуємо summary
-    const summaryParts = [
-      deviceInfo.name,
-      `IP: ${networkInfo.ip || 'Unknown'}`,
-      networkInfo.rssi !== null ? `RSSI: ${networkInfo.rssi}dBm` : null
-    ].filter(Boolean);
-
-    sendSseEvent('new', { 
-      id: filename, 
-      time: record.meta.time, 
-      device: deviceInfo,
-      network: networkInfo,
-      summary: summaryParts.join(' '),
-      sensors: {
-        lux: record.data?.lux,
-        temperature_aht: record.data?.temperature_aht_c,
-        humidity_aht: record.data?.humidity_aht_pct,
-        temperature_dht: record.data?.temperature_dht_c,
-        humidity_dht: record.data?.humidity_dht_pct,
-        battery: record.data?.battery_v,
-        uptime: record.data?.uptime_ms
-      }
-    }); 
-  } catch (e) { }
+      // ... (code to send SSE event) 
+    } catch (e) { console.error('Error sending SSE event during upload:', e); }
   // include filename in response
   return res.status(200).json({ status: 'ok', savedTo: 'received.json', uploadFile: filename });
     } catch (wfErr) {
@@ -278,7 +239,7 @@ const sseClients = new Set();
 function sendSseEvent(event, payload) {
   const msg = `event: ${event}\n` + `data: ${JSON.stringify(payload)}\n\n`;
   for (const res of sseClients) {
-    try { res.write(msg); } catch (e) { /* ignore write errors */ }
+    try { res.write(msg); } catch (e) { console.error('SSE write error:', e); }
   }
 }
 
@@ -324,6 +285,77 @@ app.delete('/api/uploads/:name', (req, res) => {
   } catch (e) {
     console.error('Failed to delete upload file:', e);
     res.status(500).json({ error: 'failed to delete' });
+  }
+});
+
+const PINS_STATE_FILE = path.join(__dirname, 'pins.json');
+
+// Endpoint to get the current state of all pins
+app.get('/api/pins', (req, res) => {
+  try {
+    if (fs.existsSync(PINS_STATE_FILE)) {
+      const state = fs.readFileSync(PINS_STATE_FILE, 'utf8');
+      res.json(JSON.parse(state));
+    } else {
+      // Default state if file doesn't exist
+      res.json({});
+    }
+  } catch (e) {
+    console.error('Failed to read pins state:', e);
+    res.status(500).json({ error: 'failed to read pins state' });
+  }
+});
+
+// Endpoint to update the state of all pins
+app.post('/api/pins', (req, res) => {
+  try {
+    const { pins } = req.body;
+    fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(pins), 'utf8');
+    console.log(`Set pins state to ${JSON.stringify(pins)}`);
+    res.json({ status: 'ok', pins });
+  } catch (e) {
+    console.error('Failed to write pins state:', e);
+    res.status(500).json({ error: 'failed to write pins state' });
+  }
+});
+
+// Endpoint to get the current state of a specific pin
+app.get('/api/pins/:pin', (req, res) => {
+  try {
+    const pin = req.params.pin;
+    if (fs.existsSync(PINS_STATE_FILE)) {
+      const state = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+      res.json({ state: state[pin] || 0 });
+    } else {
+      // Default state if file doesn't exist
+      res.json({ state: 0 });
+    }
+  } catch (e) {
+    console.error(`Failed to read pin ${req.params.pin} state:`, e);
+    res.status(500).json({ error: `failed to read pin ${req.params.pin} state` });
+  }
+});
+
+// Endpoint to update the state of a specific pin
+app.post('/api/pins/:pin', (req, res) => {
+  try {
+    const pin = req.params.pin;
+    const { state } = req.body;
+    if (state === 0 || state === 1) {
+      let pins = {};
+      if (fs.existsSync(PINS_STATE_FILE)) {
+        pins = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+      }
+      pins[pin] = state;
+      fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(pins), 'utf8');
+      console.log(`Set pin ${pin} state to ${state}`);
+      res.json({ status: 'ok', state });
+    } else {
+      res.status(400).json({ error: 'invalid state' });
+    }
+  } catch (e) {
+    console.error(`Failed to write pin ${req.params.pin} state:`, e);
+    res.status(500).json({ error: `failed to write pin ${req.params.pin} state` });
   }
 });
 
