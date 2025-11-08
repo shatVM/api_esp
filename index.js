@@ -345,10 +345,18 @@ app.get('/api/pins/:pin', (req, res) => {
   }
 });
 
+// Створюємо мапування логічних пінів на реальні GPIO
+const pinMapping = {
+  '5': 5,
+  '6': 12,
+  '7': 13,
+};
+
 // Endpoint to update the state of a specific pin
 app.post('/api/pins/:pin', async (req, res) => {
   const pinName = req.params.pin;
-  const pinNumber = pinName.replace('pin', ''); // Отримуємо номер піна, наприклад "5"
+  const logicalPinNumber = pinName.replace('pin', ''); // Отримуємо логічний номер, наприклад "6"
+  const gpioPinNumber = pinMapping[logicalPinNumber] || logicalPinNumber; // Перетворюємо на реальний GPIO
   try {
     const { state } = req.body;
     if (state === 0 || state === 1) {
@@ -362,7 +370,7 @@ app.post('/api/pins/:pin', async (req, res) => {
 
       // Надсилаємо команду на ESP8266, якщо відома IP-адреса
       if (lastKnownIp) {
-        const espUrl = `http://${lastKnownIp}/control?pin=${pinNumber}&state=${state}`;
+        const espUrl = `http://${lastKnownIp}/control?pin=${gpioPinNumber}&state=${state}`;
         console.log(`[Pin Control] Sending command to ESP: ${espUrl}`);
         try {
           const espResponse = await fetch(espUrl, { method: 'GET', timeout: 5000 });
