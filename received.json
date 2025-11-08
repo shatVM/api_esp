@@ -1,12 +1,10 @@
 {
-  "ip": "192.168.138.27",
-  "uptime_ms": 17850018,
-  "rssi_dbm": -49,
-  "lux": null,
-  "temperature_aht_c": null,
-  "humidity_aht_pct": null,
-  "temperature_dht_c": null,
-  "humidity_dht_pct": null,
-  "battery_v": 0.271,
-  "device": "esp8266_12E"
+  "ip": "192.168.1.208",
+  "uptime_ms": 240000,
+  "rssi_dbm": -56,
+  "device": "esp8266_12E",
+  "lux": 101,
+  "temperature_aht_c": 21.45,
+  "humidity_aht_pct": 44.4,
+  "battery_v": 3.48
 }

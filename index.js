@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -47,6 +48,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Зберігаємо останню відому IP-адресу пристрою
+let lastKnownIp = null;
+
 app.post('/upload', (req, res) => {
   try {
     const data = req.body;
@@ -63,6 +67,11 @@ app.post('/upload', (req, res) => {
     // console.log(`[${new Date().toISOString()}] Request body for ${req.method} ${req.originalUrl}:`);
     // console.log(JSON.stringify(data, null, 2));
 
+    // Оновлюємо останню відому IP-адресу з тіла запиту або з інформації про з'єднання
+    if (data.ip) {
+        lastKnownIp = data.ip;
+        console.log(`[IP Update] Last known ESP IP updated to: ${lastKnownIp}`);
+    }
 
     const outPath = path.join(__dirname, 'received.json');
     fs.writeFileSync(outPath, JSON.stringify(data, null, 2), 'utf8');
@@ -337,25 +346,45 @@ app.get('/api/pins/:pin', (req, res) => {
 });
 
 // Endpoint to update the state of a specific pin
-app.post('/api/pins/:pin', (req, res) => {
+app.post('/api/pins/:pin', async (req, res) => {
+  const pinName = req.params.pin;
+  const pinNumber = pinName.replace('pin', ''); // Отримуємо номер піна, наприклад "5"
   try {
-    const pin = req.params.pin;
     const { state } = req.body;
     if (state === 0 || state === 1) {
       let pins = {};
       if (fs.existsSync(PINS_STATE_FILE)) {
         pins = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
       }
-      pins[pin] = state;
+      pins[pinName] = state;
       fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(pins), 'utf8');
-      console.log(`Set pin ${pin} state to ${state}`);
-      res.json({ status: 'ok', state });
+      console.log(`[Pin Control] Set pin ${pinName} state to ${state} in pins.json`);
+
+      // Надсилаємо команду на ESP8266, якщо відома IP-адреса
+      if (lastKnownIp) {
+        const espUrl = `http://${lastKnownIp}/control?pin=${pinNumber}&state=${state}`;
+        console.log(`[Pin Control] Sending command to ESP: ${espUrl}`);
+        try {
+          const espResponse = await fetch(espUrl, { method: 'GET', timeout: 5000 });
+          if (!espResponse.ok) {
+            throw new Error(`ESP returned status: ${espResponse.status}`);
+          }
+          console.log('[Pin Control] Successfully sent command to ESP.');
+        } catch (espError) {
+          console.error(`[Pin Control] Failed to send command to ESP8266 at ${lastKnownIp}:`, espError.message);
+          // Незважаючи на помилку, ми все одно повертаємо успіх, оскільки стан на сервері оновлено
+        }
+      } else {
+        console.warn('[Pin Control] Cannot send command to ESP: IP address is unknown.');
+      }
+
+      res.json({ status: 'ok', state, sentToEsp: !!lastKnownIp });
     } else {
       res.status(400).json({ error: 'invalid state' });
     }
   } catch (e) {
-    console.error(`Failed to write pin ${req.params.pin} state:`, e);
-    res.status(500).json({ error: `failed to write pin ${req.params.pin} state` });
+    console.error(`[Pin Control] Failed to write pin ${pinName} state:`, e);
+    res.status(500).json({ error: `failed to write pin ${pinName} state` });
   }
 });
 
