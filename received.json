@@ -1,11 +1,11 @@
 {
   "ip": "192.168.1.208",
-  "uptime_ms": 210238,
+  "uptime_ms": 540275,
   "public_ip": "46.211.97.197",
   "gateway_ip": "192.168.1.1",
-  "rssi_dbm": -45,
+  "rssi_dbm": -47,
   "device": "esp8266_12E",
-  "temperature_aht_c": 20.95,
-  "humidity_aht_pct": 46.8,
-  "battery_v": 4.002
+  "temperature_aht_c": 22.3,
+  "humidity_aht_pct": 47,
+  "battery_v": 4.056
 }

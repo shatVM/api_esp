@@ -626,4 +626,24 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    // --- Управління станом через блоки PIN State ---
+    const pinStateContainer = document.getElementById('pinState');
+    if (pinStateContainer) {
+        pinStateContainer.addEventListener('click', (event) => {
+            const pinElement = event.target.closest('.pin');
+            if (!pinElement) {
+                return; // Клік був не по елементу піна
+            }
+
+            const pinName = pinElement.dataset.pin; // напр., "pin4"
+            const switchElement = document.getElementById(`${pinName}Switch`);
+
+            if (switchElement) {
+                // Програмно клікаємо на відповідний перемикач.
+                // Це автоматично викличе його обробник 'change', який відправить запит на сервер.
+                switchElement.click();
+            }
+        });
+    }
 });

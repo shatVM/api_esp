@@ -103,6 +103,7 @@ void sendDataToServer() {
   jsonDoc["gateway_ip"] = WiFi.gatewayIP().toString();
   jsonDoc["rssi_dbm"] = WiFi.RSSI();
   jsonDoc["device"] = "esp8266_12E";
+  jsonDoc["lux"] = random(50, 300); // Повертаємо генерацію значення освітленості
   jsonDoc["temperature_aht_c"] = 20.0 + (random(0, 100) / 100.0 * 5.0);
   jsonDoc["humidity_aht_pct"] = 40.0 + (random(0, 100) / 100.0 * 20.0);
   jsonDoc["battery_v"] = 3.3 + (random(0, 100) / 100.0 * 0.9);
