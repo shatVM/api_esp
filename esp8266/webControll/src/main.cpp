@@ -21,6 +21,7 @@ const unsigned long UPLOAD_INTERVAL = 30000; // 30 секунд
 const unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000; // таймаут підключення Wi-Fi
 
 // Піни (GPIO numbers)
+const int PIN_4 = 4;   // D2 -> GPIO4
 const int PIN_5 = 5;   // D1 -> GPIO5
 const int PIN_6 = 12;  // D6 -> GPIO12
 const int PIN_7 = 13;  // D7 -> GPIO13
@@ -44,7 +45,7 @@ void handleControl() {
     pin = espServer.arg("pin").toInt();
     state = espServer.arg("state").toInt();
 
-    if ((pin == PIN_5 || pin == PIN_6 || pin == PIN_7) && (state == 0 || state == 1)) {
+    if ((pin == PIN_4 || pin == PIN_5 || pin == PIN_6 || pin == PIN_7) && (state == 0 || state == 1)) {
       Serial.printf("Control Request: Set pin %d to state %d\n", pin, state);
 
       pinMode(pin, OUTPUT);
@@ -170,9 +171,11 @@ void setup() {
   Serial.println("\nESP8266 Starting...");
 
   // Ініціалізація пінів
+  pinMode(PIN_4, OUTPUT);
   pinMode(PIN_5, OUTPUT);
   pinMode(PIN_6, OUTPUT);
   pinMode(PIN_7, OUTPUT);
+  digitalWrite(PIN_4, LOW);
   digitalWrite(PIN_5, LOW);
   digitalWrite(PIN_6, LOW);
   digitalWrite(PIN_7, LOW);

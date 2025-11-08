@@ -26,6 +26,10 @@
             <h2>PIN Control</h2>
             {{! додати перемикач який на сервер буде відправляти 1 або 0 }}
             <label class="switch">
+              <input type="checkbox" id="pin4Switch" />
+              <span class="slider">4 PIN</span>
+            </label>
+            <label class="switch">
               <input type="checkbox" id="pin5Switch" />
               <span class="slider">5 PIN</span>
             </label>
@@ -43,6 +47,10 @@
             {{! додати перемикач який на сервер буде відправляти 1 або 0 }}
             {{! додати блок який буде показувати стан кожного кольором червоний/зелений з PIN з сервера отрисуючи дані з запита на ендпоінт /pinstate  }}
             <div id="pinState">
+              <div class="pin" data-pin="pin4">
+                <span class="pin-label">4 PIN</span>
+                <span class="pin-status red">OFF</span>
+              </div>
               <div class="pin" data-pin="pin5">
                 <span class="pin-label">5 PIN</span>
                 <span class="pin-status red">OFF</span>
