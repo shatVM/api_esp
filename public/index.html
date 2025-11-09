@@ -6,70 +6,8 @@
     <title>Моніторинг ESP8266 | Панель Датчиків</title>
     <!-- Tailwind CSS CDN --><script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons CDN --><script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        /* Custom styles for the flip effect */
-        .sensor-card {
-            perspective: 1000px;
-            cursor: pointer;
-            transition: transform 0.6s;
-            transform-style: preserve-3d;
-            height: 300px; /* Збільшена фіксована висота картки */
-            min-height: 300px; /* Мінімальна висота для гнучкості */
-        }
-        .card-inner {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            text-align: center;
-            transition: transform 0.6s;
-            transform-style: preserve-3d;
-        }
-        .sensor-card:hover .card-inner,
-        .sensor-card.flipped .card-inner {
-            transform: rotateY(180deg);
-        }
-        .card-front, .card-back {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            -webkit-backface-visibility: hidden; /* Safari */
-            backface-visibility: hidden;
-            border-radius: 1rem;
-            padding: 1.5rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            /* Додатково, щоб уникнути руйнування дизайну, якщо вміст дуже довгий */
-            min-height: 300px; 
-        }
-        .card-back {
-            transform: rotateY(180deg);
-        }
-        .data-active-bg {
-             /* Light blue background for active cards */
-            background-color: #e0f2fe; /* blue-50 */
-        }
-        .data-inactive-bg {
-            /* Light gray background for inactive cards */
-            background-color: #f3f4f6; /* gray-100 */
-        }
-        
-        @keyframes spin-once {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .animate-spin-once {
-            animation: spin-once 0.8s ease-in-out;
-        }
-        /* Адаптуємо grid для мобільного вигляду, щоб вмістити всі картки */
-        @media (min-width: 640px) {
-            #sensorGrid {
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            }
-        }
-    </style>
+    <!-- Custom Dashboard Styles -->
+    <link rel="stylesheet" href="/css/dashboard.css">
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
 
@@ -87,6 +25,8 @@
                 <i data-lucide="database" class="w-5 h-5 mr-2"></i>
                 Переглянути Отримані Дані
             </a>
+            <a href="/control" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-full transition duration-150 ease-in-out shadow-lg flex items-center">
+                <i data-lucide="binary" class="w-5 h-5 mr-2"></i>Pin Control</a>
         </div>
     </header>
 

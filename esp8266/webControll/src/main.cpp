@@ -45,7 +45,21 @@ void handleControl() {
     pin = espServer.arg("pin").toInt();
     state = espServer.arg("state").toInt();
 
-    if ((pin == PIN_4 || pin == PIN_5 || pin == PIN_6 || pin == PIN_7) && (state == 0 || state == 1)) {
+    // Спеціальна логіка для PIN_5: імітація натискання кнопки
+    if (pin == PIN_5) {
+      Serial.println("Control Request: Simulating button press on PIN_5");
+
+      pinMode(PIN_5, OUTPUT);
+      digitalWrite(PIN_5, HIGH); // "Натискаємо" кнопку
+      delay(300);                // Тримаємо 300 мс
+      digitalWrite(PIN_5, LOW);  // "Відпускаємо" кнопку
+
+      espServer.send(200, "text/plain", "OK - Pulsed PIN_5");
+      return;
+    }
+
+    // Стандартна логіка для інших пінів
+    if ((pin == PIN_4 || pin == PIN_6 || pin == PIN_7) && (state == 0 || state == 1)) {
       Serial.printf("Control Request: Set pin %d to state %d\n", pin, state);
 
       pinMode(pin, OUTPUT);

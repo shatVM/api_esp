@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP Pin Control</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>ESP Pin Control</h1>
+        <a href="/view" class="header-link">На головну панель</a>
+    </div>
+    
+    <div class="container">
+        <div class="three-col" style="grid-template-columns: 1fr; max-width: 600px; margin: auto;">
+            <aside class="sidebar">
+                {{#if latestData}}
+                <div id="SensorInfo">
+                    <h2>Останні дані з датчиків</h2>
+                    <div class="sensor-grid">
+                        <div class="sensor-item">
+                            <span class="sensor-label">🌡️ Температура</span>
+                            <span id="sensor-temp" class="sensor-value">{{toFixed latestData.temperature_aht_c 1}} °C</span>
+                        </div>
+                        <div class="sensor-item">
+                            <span class="sensor-label">💧 Вологість</span>
+                            <span id="sensor-humid" class="sensor-value">{{toFixed latestData.humidity_aht_pct 1}} %</span>
+                        </div>
+                        <div class="sensor-item">
+                            <span class="sensor-label">☀️ Освітленість</span>
+                            <span id="sensor-lux" class="sensor-value">{{toFixed latestData.lux 1}} lux</span>
+                        </div>
+                        <div id="battery-item" class="sensor-item">
+                            <span class="sensor-label">🔋 Батарея</span>
+                            <span id="sensor-battery" class="sensor-value">{{toFixed latestData.battery_v 1}} V</span>
+                        </div>
+                    </div>
+                </div>
+                {{/if}}
+                <!-- Приховані перемикачі, необхідні для логіки -->
+                <div style="display: none;">
+                    <input type="checkbox" id="pin4Switch" />
+                    <input type="checkbox" id="pin5Switch" />
+                    <input type="checkbox" id="pin6Switch" />
+                    <input type="checkbox" id="pin7Switch" />
+                </div>
+    
+                <div id="PINControl">
+                    <h2>PIN State</h2>
+                    {{!-- <p>Натисніть на блок для перемикання стану</p> --}}
+                    <div id="pinState">
+                      <div class="pin" data-pin="pin4">
+                        <span class="pin-label">4 PIN</span>
+                        <span class="pin-status red">OFF</span>
+                      </div>
+                      <div class="pin" data-pin="pin5">
+                        <span class="pin-label">5 PIN</span>
+                        <span class="pin-status red">OFF</span>
+                      </div>
+                      <div class="pin" data-pin="pin6">
+                        <span class="pin-label">12 PIN</span>
+                        <span class="pin-status red">OFF</span>
+                      </div>
+                      <div class="pin" data-pin="pin7">
+                        <span class="pin-label">13 PIN</span>
+                        <span class="pin-status red">OFF</span>
+                      </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+    
+    <script src="/js/pin-control.js"></script>
+</body>
+</html>
+            </div>
+
+
+        </main>
+    </div>
+
+    <script src="/js/control.js"></script>
+</body>
+</html>

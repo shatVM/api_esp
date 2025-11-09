@@ -16,6 +16,7 @@ const hbs = require('hbs');
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'hbs');
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/css', express.static(path.join(__dirname, 'public', 'css')));
 
 // Register a simple helper to pretty-print JSON in templates
 hbs.registerHelper('json', function(context) {
@@ -24,6 +25,15 @@ hbs.registerHelper('json', function(context) {
   } catch (e) {
     return '';
   }
+});
+
+// Register a helper to format numbers to a fixed number of decimal places
+hbs.registerHelper('toFixed', function(number, digits) {
+  if (typeof number === 'number') {
+    return number.toFixed(digits);
+  }
+  // Return the original value if it's not a number (e.g., null or undefined)
+  return number;
 });
 
 // Ensure upload directory exists
@@ -94,9 +104,11 @@ app.post('/upload', (req, res) => {
       };
   fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf8');
   console.log(`Saved upload record to ${filePath}`);
-  // notify SSE clients about new upload
-  try { 
-      // ... (code to send SSE event) 
+  // Повідомляємо клієнтів SSE про нове завантаження
+  try {
+      // Надсилаємо подію 'new' з повним записом даних
+      // Це дозволить клієнтам оновити інтерфейс
+      sendSseEvent('new', record);
     } catch (e) { console.error('Error sending SSE event during upload:', e); }
   // include filename in response
   return res.status(200).json({ status: 'ok', savedTo: 'received.json', uploadFile: filename });
@@ -145,6 +157,48 @@ app.get('/view', (req, res) => {
   }
 
   return res.render('received', { exists: true, list });
+});
+
+// Render a dedicated mobile-first control page
+app.get('/control', (req, res) => {
+  let latestData = null;
+  try {
+    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
+    if (files.length > 0) {
+      // Сортуємо файли за назвою (яка містить timestamp), щоб знайти останній
+      files.sort().reverse();
+      const latestFile = files[0];
+      const raw = fs.readFileSync(path.join(UPLOAD_DIR, latestFile), 'utf8');
+      const parsed = JSON.parse(raw);
+      // Передаємо тільки дані з датчиків
+      latestData = parsed.data; 
+    }
+  } catch (e) {
+    console.error('Failed to get latest data for /control page:', e);
+  }
+  // Передаємо дані в шаблон
+  return res.render('controll', { latestData });
+});
+
+// API: Get latest sensor data for real-time updates
+app.get('/api/latest-data', (req, res) => {
+  try {
+    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
+    if (files.length > 0) {
+      files.sort().reverse();
+      const latestFile = files[0];
+      const raw = fs.readFileSync(path.join(UPLOAD_DIR, latestFile), 'utf8');
+      const parsed = JSON.parse(raw);
+      // Return just the sensor data object
+      return res.json(parsed.data || {});
+    } else {
+      // If no data is available, return an empty object or an error
+      return res.status(404).json({ error: 'No data available' });
+    }
+  } catch (e) {
+    console.error('Failed to get latest data for API:', e);
+    return res.status(500).json({ error: 'Failed to read latest data' });
+  }
 });
 
 // API: list uploads with pagination

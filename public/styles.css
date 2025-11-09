@@ -20,6 +20,26 @@ body {
   justify-content: space-between;
 }
 
+.header-link {
+  background-color: #0284c7; /* Tailwind sky-600 */
+  color: #ffffff;
+  font-weight: 600;
+  padding: 0.5rem 1rem; /* Tailwind py-2 px-4 */
+  border-radius: 9999px; /* Tailwind rounded-full */
+  text-decoration: none;
+  transition: background-color 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.header-link:hover {
+  background-color: #0369a1; /* Tailwind sky-700 */
+  color: #ffffff;
+  text-decoration: none;
+}
+
 .device-item {
   cursor: pointer;
   transition: background-color 0.3s;
@@ -565,9 +585,10 @@ input:checked + .slider:before {
 /* Pin State Display */
 #pinState {
   display: flex;
+  justify-content: space-around;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 15px;
+  margin: 5px;
 }
 
 .pin {
@@ -579,7 +600,12 @@ input:checked + .slider:before {
   flex-direction: column;
   align-items: center;
   box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-  min-width: 80px;
+  min-width: 100px;
+  min-height: 100px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
 .pin-label {
@@ -589,11 +615,19 @@ input:checked + .slider:before {
 }
 
 .pin-status {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   font-size: 1.2em;
   font-weight: bold;
   padding: 5px 10px;
   border-radius: 5px;
   color: #fff;
+  min-width: 50px;
+  min-height: 50px;
 }
 
 .pin-status.green {
@@ -625,3 +659,61 @@ input:checked + .slider:before {
   height: 300px;
 }
 
+/* Styles for Sensor Info Block on Control Page */
+#SensorInfo {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+#SensorInfo h2 {
+  color: #333;
+  font-size: 18px;
+  margin-top: 0;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  /* Змінено з grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); для кращого вигляду в одній колонці */
+  gap: 12px;
+}
+
+.sensor-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+
+.sensor-label {
+  font-size: 16px;
+  color: #555;
+}
+
+.sensor-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1877f2;
+}
+
+/* Нова візуалізація для батареї */
+#battery-item {
+  position: relative;
+  background: linear-gradient(
+    to right, 
+    #dcfce7, /* Світло-зелений */
+    #dcfce7 var(--battery-level-pct, 0%), 
+    #ffffff var(--battery-level-pct, 0%), /* Білий */
+    #ffffff
+  );
+  transition: background 0.5s ease-in-out;
+}
