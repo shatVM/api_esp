@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESP Pin Control</title>
+    <meta name="theme-color" content="#1877f2"/>
+    <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -73,6 +75,16 @@
     </div>
     
     <script src="/js/pin-control.js"></script>
+    <script>
+      // Реєстрація Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => console.log('Service Worker registered successfully! Scope: ', registration.scope))
+            .catch(err => console.log('Service Worker registration failed: ', err));
+        });
+      }
+    </script>
 </body>
 </html>
             </div>
