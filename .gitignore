@@ -2,9 +2,9 @@
 /node_modules/
 
 # Файли, що генеруються сервером автоматично
-/received.json
-/pins.json
-/upload/
+#/received.json
+#/pins.json
+#/upload/
 
 # Файл для локальних змінних середовища
 .env
