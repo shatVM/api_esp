@@ -10,7 +10,9 @@ const char* WIFI_PASSWORD = "34968141";      // <-- ВАШ ПАРОЛЬ (кра�
 
 // --- Налаштування серверів ---
 // Пріоритетний публічний сервер (HTTPS)
-const char* PUBLIC_SERVER_HOST = "api-esp-tnww.onrender.com";
+// const char* PUBLIC_SERVER_HOST = "api-esp-tnww.onrender.com";
+const char* PUBLIC_SERVER_HOST = "";
+
 const int PUBLIC_SERVER_PORT = 443;
 
 // Резервний локальний сервер (HTTP)
