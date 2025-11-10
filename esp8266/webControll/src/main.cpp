@@ -5,13 +5,13 @@
 #include <ArduinoJson.h>
 
 // --- 1. НАЛАШТУВАННЯ ---
-const char* WIFI_SSID = "Kyivstar4G";        // <-- ВАШ SSID
-const char* WIFI_PASSWORD = "34968141";      // <-- ВАШ ПАРОЛЬ (краще не хардкодити)
+const char* WIFI_SSID = "FreeZSTU";      // <-- ВАШ SSID
+const char* WIFI_PASSWORD = "";      // <-- ВАШ ПАРОЛЬ (краще не хардкодити)
 
 // --- Налаштування серверів ---
 // Пріоритетний публічний сервер (HTTPS)
 // const char* PUBLIC_SERVER_HOST = "api-esp-tnww.onrender.com";
-const char* PUBLIC_SERVER_HOST = "";
+const char* PUBLIC_SERVER_HOST = "api-esp-tnww.onrender.com";
 
 const int PUBLIC_SERVER_PORT = 443;
 
@@ -19,7 +19,7 @@ const int PUBLIC_SERVER_PORT = 443;
 const char* LOCAL_SERVER_HOST = "192.168.1.115";
 const int LOCAL_SERVER_PORT = 80;
 
-const unsigned long UPLOAD_INTERVAL = 30000; // 30 секунд
+const unsigned long UPLOAD_INTERVAL = 1000; // 30 секунд
 const unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000; // таймаут підключення Wi-Fi
 
 // Піни (GPIO numbers)
@@ -182,6 +182,88 @@ void sendDataToServer() {
 }
 
 
+// --- Функція оновлення стану пінів з сервера ---
+void updatePinStatesFromServer() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println(F("Cannot update pin states, not connected to Wi-Fi."));
+    return;
+  }
+
+  Serial.println(F("--- Starting pin state update sequence ---"));
+
+  // Лямбда для виконання GET-запиту
+  auto performPinStateGet = [&](const char* host, int port, bool isHttps) -> bool {
+    HTTPClient http;
+    String url = (isHttps ? "https" : "http") + String("://") + host + ":" + String(port) + "/pinstate";
+    
+    Serial.print(F("Requesting pin states from: "));
+    Serial.println(url);
+
+    bool beginSuccess = false;
+    if (isHttps) {
+      WiFiClientSecure clientSecure;
+      clientSecure.setInsecure();
+      beginSuccess = http.begin(clientSecure, url);
+    } else {
+      WiFiClient client;
+      beginSuccess = http.begin(client, url);
+    }
+
+    if (!beginSuccess) {
+      Serial.println(F("... HTTP begin failed."));
+      return false;
+    }
+
+    int httpCode = http.GET();
+
+    if (httpCode != HTTP_CODE_OK) {
+      Serial.printf("... Failed, HTTP code: %d\n", httpCode);
+      http.end();
+      return false;
+    }
+
+    String payload = http.getString();
+    http.end(); // Закриваємо з'єднання якомога раніше
+
+    Serial.print(F("... Received pin states: "));
+    Serial.println(payload);
+
+    const size_t capacity = JSON_OBJECT_SIZE(4) + 64;
+    DynamicJsonDocument doc(capacity);
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error) {
+      Serial.print(F("... deserializeJson() failed: "));
+      Serial.println(error.c_str());
+      return false;
+    }
+
+    // Застосовуємо стан пінів
+    if (doc.containsKey("pin4")) digitalWrite(PIN_4, doc["pin4"].as<int>());
+    if (doc.containsKey("pin5")) digitalWrite(PIN_5, doc["pin5"].as<int>());
+    if (doc.containsKey("pin6")) digitalWrite(PIN_6, doc["pin6"].as<int>());
+    if (doc.containsKey("pin7")) digitalWrite(PIN_7, doc["pin7"].as<int>());
+    
+    return true; // Успіх
+  };
+
+  // Спочатку пробуємо публічний сервер
+  bool success = performPinStateGet(PUBLIC_SERVER_HOST, PUBLIC_SERVER_PORT, true);
+
+  // Якщо не вдалося, пробуємо локальний
+  if (!success) {
+    Serial.println(F("Public server failed for pin states. Falling back to local server..."));
+    success = performPinStateGet(LOCAL_SERVER_HOST, LOCAL_SERVER_PORT, false);
+  }
+
+  if (success) {
+    Serial.println(F("Pin states updated successfully."));
+  } else {
+    Serial.println(F("Failed to update pin states from any available server."));
+  }
+  Serial.println(F("----------------------------------------"));
+}
+
 // --- SETUP ---
 void setup() {
   Serial.begin(115200);
@@ -208,11 +290,15 @@ void setup() {
     delay(250);
     Serial.print(".");
   }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected!");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-  } else {
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      Serial.println("\nConnected!");
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+  
+      // Отримуємо початковий стан пінів з сервера
+      updatePinStatesFromServer();
+    } else {
     Serial.println("\nWi-Fi connect timed out.");
     // Можна або перезавантажитись, або перейти в режим AP, або спробувати ще раз через деякий час.
     // Тут просто продовжуємо — upload буде пропускатися поки немає підключення.
@@ -234,4 +320,11 @@ void loop() {
     lastUploadTime = millis();
     sendDataToServer();
   }
+  // Періодично оновлюємо стани пінів з сервера через 5 секунд
+  static unsigned long lastPinUpdateTime = 0;
+  if (millis() - lastPinUpdateTime >= UPLOAD_INTERVAL) {
+    lastPinUpdateTime = millis();
+    updatePinStatesFromServer();
+  }
+
 }
