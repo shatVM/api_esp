@@ -35,6 +35,15 @@ const int PIN_7 = 13; // D7 -> GPIO13
 
 DHT dht(DHTPIN, DHTTYPE);
 
+// --- Налаштування АЦП для вимірювання напруги ---
+const int ADC_PIN = A0;
+// Коефіцієнт дільника напруги. Розрахунок: (R1 + R2) / R2.
+// ESP8266 вимірює до 1.0V на піні A0. Дільник потрібен, щоб знизити напругу батареї.
+// Наприклад, для R1=320kОм, R2=100kОм, коефіцієнт = (320+100)/100 = 4.2.
+// Налаштуйте це значення відповідно до вашої схеми!
+const float VOLTAGE_DIVIDER_RATIO = 4.2; 
+
+
 // --- Глобальні об'єкти ---
 ESP8266WebServer espServer(80);
 
@@ -148,7 +157,11 @@ void sendDataToServer() {
     jsonDoc["humidity_dht_pct"] = humidity;
   }
   
-  jsonDoc["battery_v"] = 3.3 + (random(0, 100) / 100.0 * 0.9);
+  // Читаємо та розраховуємо реальну напругу батареї
+  int adcValue = analogRead(ADC_PIN);
+  // Перетворюємо значення АЦП (0-1023) у напругу, враховуючи дільник
+  float batteryVoltage = adcValue / 1023.0 * VOLTAGE_DIVIDER_RATIO;
+  jsonDoc["battery_v"] = batteryVoltage;
 
   String jsonString;
   serializeJson(jsonDoc, jsonString);
