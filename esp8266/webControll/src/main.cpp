@@ -3,8 +3,9 @@
 #include <ESP8266WebServer.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <DHT.h>
 
-// --- 1. НАЛАШТУВАННЯ ---
+// Для WPA2-Enterprise
 const char* WIFI_SSID = "FreeZSTU";      // <-- ВАШ SSID
 const char* WIFI_PASSWORD = "";      // <-- ВАШ ПАРОЛЬ (краще не хардкодити)
 
@@ -25,8 +26,14 @@ const unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000; // таймаут підк�
 // Піни (GPIO numbers)
 const int PIN_4 = 4;   // D2 -> GPIO4
 const int PIN_5 = 5;   // D1 -> GPIO5
-const int PIN_6 = 12;  // D6 -> GPIO12
-const int PIN_7 = 13;  // D7 -> GPIO13
+const int PIN_6 = 12; // D6 -> GPIO12
+const int PIN_7 = 13; // D7 -> GPIO13
+
+// --- Налаштування DHT сенсора ---
+#define DHTPIN 2     // Пін, до якого підключено DHT11 (D4 на NodeMCU)
+#define DHTTYPE DHT11  // Тип сенсора
+
+DHT dht(DHTPIN, DHTTYPE);
 
 // --- Глобальні об'єкти ---
 ESP8266WebServer espServer(80);
@@ -110,6 +117,18 @@ void sendDataToServer() {
   String publicIp = getPublicIP();
 
   // 2. Підготовка JSON-даних
+  
+  // Читаємо дані з DHT11
+  float humidity = dht.readHumidity();
+  float temperature = dht.readTemperature(); // or dht.readTemperature(true) for Fahrenheit
+
+  // Перевіряємо, чи вдалося зчитати дані
+  if (isnan(humidity) || isnan(temperature)) {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    // Можна не відправляти дані, якщо сенсор не працює, або відправити з null значеннями
+    // Тут ми просто не додаємо ці поля в JSON
+  }
+
   const size_t capacity = 1024;
   DynamicJsonDocument jsonDoc(capacity);
 
@@ -119,9 +138,16 @@ void sendDataToServer() {
   jsonDoc["gateway_ip"] = WiFi.gatewayIP().toString();
   jsonDoc["rssi_dbm"] = WiFi.RSSI();
   jsonDoc["device"] = "esp8266_12E";
-  jsonDoc["lux"] = random(50, 300); // Повертаємо генерацію значення освітленості
-  jsonDoc["temperature_aht_c"] = 20.0 + (random(0, 100) / 100.0 * 5.0);
-  jsonDoc["humidity_aht_pct"] = 40.0 + (random(0, 100) / 100.0 * 20.0);
+  jsonDoc["lux"] = random(50, 300); // Залишаємо випадкове значення для освітленості
+
+  // Додаємо дані з DHT, якщо вони валідні
+  if (!isnan(temperature)) {
+    jsonDoc["temperature_dht_c"] = temperature;
+  }
+  if (!isnan(humidity)) {
+    jsonDoc["humidity_dht_pct"] = humidity;
+  }
+  
   jsonDoc["battery_v"] = 3.3 + (random(0, 100) / 100.0 * 0.9);
 
   String jsonString;
@@ -281,6 +307,9 @@ void setup() {
 
   // Ініціалізація random
   randomSeed(ESP.getCycleCount() ^ analogRead(A0));
+
+  // Ініціалізація DHT сенсора
+  dht.begin();
 
   // Підключення до Wi-Fi з таймаутом
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);

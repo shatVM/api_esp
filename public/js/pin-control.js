@@ -221,8 +221,8 @@ function setupRealtimeSensorUpdates() {
             const batteryItemEl = document.getElementById('battery-item');
 
             // Використовуємо '??' для відображення 'N/A', якщо дані відсутні
-            if (tempEl) tempEl.textContent = formatSensorValue(data.temperature_aht_c, '°C');
-            if (humidEl) humidEl.textContent = formatSensorValue(data.humidity_aht_pct, '%');
+            if (tempEl) tempEl.textContent = formatSensorValue(data.temperature_dht_c, '°C');
+            if (humidEl) humidEl.textContent = formatSensorValue(data.humidity_dht_pct, '%');
             if (luxEl) luxEl.textContent = formatSensorValue(data.lux, 'lux');
             
             if (batteryEl && batteryItemEl) {
