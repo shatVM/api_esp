@@ -217,19 +217,19 @@ app.get('/api/uploads', (req, res) => {
         // Read the full data object for device and network info
         // Перетворюємо дані в потрібний формат
         const deviceInfo = {
-          name: parsed?.data?.device || 'Unknown Device',
-          chipModel: 'ESP',
-          cpuFreqMHz: null,
-          flashSizeMB: null,
-          sdkVersion: null,
-          macAddress: null
+          name: parsed?.data?.deviceName || parsed?.data?.device || 'Unknown Device',
+          chipModel: parsed?.data?.chipModel || 'ESP',
+          cpuFreqMHz: parsed?.data?.cpuFreqMHz || null,
+          flashSizeMB: parsed?.data?.flashSizeMB || null,
+          sdkVersion: parsed?.data?.sdkVersion || null,
+          macAddress: parsed?.data?.macAddress || null
         };
 
         const networkInfo = {
           ip: parsed?.data?.ip || null,
-          ssid: null,
+          ssid: parsed?.data?.ssid || null,
           rssi: parsed?.data?.rssi_dbm || null,
-          channel: null
+          channel: parsed?.data?.channel || null
         };
 
         // Формуємо summary з доступних даних

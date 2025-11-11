@@ -146,8 +146,17 @@ void sendDataToServer() {
   jsonDoc["public_ip"] = publicIp;
   jsonDoc["gateway_ip"] = WiFi.gatewayIP().toString();
   jsonDoc["rssi_dbm"] = WiFi.RSSI();
-  jsonDoc["device"] = "esp8266_12E";
+  jsonDoc["deviceName"] = "esp8266_12E";
   jsonDoc["lux"] = random(50, 300); // Залишаємо випадкове значення для освітленості
+
+  // Додаємо нові деталі про пристрій
+  jsonDoc["macAddress"] = WiFi.macAddress();
+  jsonDoc["cpuFreqMHz"] = ESP.getCpuFreqMHz();
+  jsonDoc["flashSizeMB"] = ESP.getFlashChipSize() / (1024.0 * 1024.0);
+  jsonDoc["sdkVersion"] = ESP.getSdkVersion();
+  jsonDoc["ssid"] = WiFi.SSID();
+  jsonDoc["channel"] = WiFi.channel();
+  jsonDoc["chipModel"] = "ESP8266";
 
   // Додаємо дані з DHT, якщо вони валідні
   if (!isnan(temperature)) {
