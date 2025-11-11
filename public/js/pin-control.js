@@ -48,8 +48,8 @@ function initializePinControl() {
      * @param {object} states - Об'єкт зі станами пінів.
      */
     function updateSwitches(states) {
-        // Оновлюємо всі перемикачі, що знаходяться в #PINControl або приховані
-        const switches = document.querySelectorAll('#PINControl input[type="checkbox"], div[style*="display: none"] input[type="checkbox"]');
+        // Оновлюємо всі перемикачі, що знаходяться в #PIN_сontrol або приховані
+        const switches = document.querySelectorAll('#PIN_сontrol input[type="checkbox"], div[style*="display: none"] input[type="checkbox"]');
         switches.forEach(switchEl => {
             const pin = switchEl.id.replace('Switch', '');
             if (states[pin] !== undefined) {

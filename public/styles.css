@@ -505,15 +505,21 @@ empty .list-row {
 }
 
 /* Styles for PIN Control */
+
 #PINControl {
+  display: none;
+}
+
+#PIN_сontrol {
   margin-bottom: 20px;
   padding: 15px;
   background: #f9f9f9;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  /* display: none; */
 }
 
-#PINControl h2 {
+#PIN_сontrol h2 {
   color: #333;
   font-size: 18px;
   margin-top: 0;

@@ -157,7 +157,7 @@ app.get('/view', (req, res) => {
     console.error('Failed to build uploads list for /view:', e);
   }
 
-  return res.render('received', { exists: true, list });
+  return res.render('dashboard', { exists: true, list });
 });
 
 // Render a dedicated mobile-first control page
@@ -428,16 +428,18 @@ app.post('/api/pins/:pin', async (req, res) => {
       if (lastKnownIp) {
         const espUrl = `http://${lastKnownIp}/control?pin=${gpioPinNumber}&state=${state}`;
         console.log(`[Pin Control] Sending command to ESP: ${espUrl}`);
-        try {
-          const espResponse = await fetch(espUrl, { method: 'GET', timeout: 5000 });
-          if (!espResponse.ok) {
-            throw new Error(`ESP returned status: ${espResponse.status}`);
-          }
-          console.log('[Pin Control] Successfully sent command to ESP.');
-        } catch (espError) {
-          console.error(`[Pin Control] Failed to send command to ESP8266 at ${lastKnownIp}:`, espError.message);
-          // Незважаючи на помилку, ми все одно повертаємо успіх, оскільки стан на сервері оновлено
-        }
+        // Не чекаємо на відповідь від ESP, щоб не блокувати запит
+        fetch(espUrl, { method: 'GET', timeout: 5000 })
+          .then(espResponse => {
+            if (!espResponse.ok) {
+              console.error(`[Pin Control] ESP returned status: ${espResponse.status}`);
+            } else {
+              console.log('[Pin Control] Successfully sent command to ESP.');
+            }
+          })
+          .catch(espError => {
+            console.error(`[Pin Control] Failed to send command to ESP8266 at ${lastKnownIp}:`, espError.message);
+          });
       } else {
         console.warn('[Pin Control] Cannot send command to ESP: IP address is unknown.');
       }

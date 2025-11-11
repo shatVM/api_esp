@@ -578,36 +578,54 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => console.error('Failed to fetch pin states', err));
 
-        // Додавання обробників подій зміни стану
+        // Додавання обробників подій зміни стану з оптимістичним оновленням
         switches.forEach(switchEl => {
             switchEl.addEventListener('change', (event) => {
                 const pin = event.target.id.replace('Switch', '');
-                const state = event.target.checked ? 1 : 0;
+                const newState = event.target.checked ? 1 : 0;
+                const oldState = newState === 1 ? 0 : 1;
 
+                // Оптимістичне оновлення UI
+                const pinElement = document.querySelector(`[data-pin="${pin}"]`);
+                if (pinElement) {
+                    const statusElement = pinElement.querySelector('.pin-status');
+                    if (statusElement) {
+                        const isPinOn = newState === 1;
+                        statusElement.textContent = isPinOn ? 'ON' : 'OFF';
+                        statusElement.classList.toggle('green', isPinOn);
+                        statusElement.classList.toggle('red', !isPinOn);
+                    }
+                }
+
+                // Надсилання запиту на сервер
                 fetch(`/api/pins/${pin}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ state })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ state: newState })
                 })
                 .then(res => {
-                    if (!res.ok) {
-                        throw new Error('Server returned non-ok status: ' + res.status);
-                    }
+                    if (!res.ok) throw new Error('Server returned non-ok status: ' + res.status);
                     return res.json();
                 })
                 .then(data => {
                     if (data.status !== 'ok') {
-                        console.error(`Failed to update pin ${pin} state. Response:`, data);
-                    } else {
-                        fetchPinStates();
+                        throw new Error(`Server response was not ok: ${JSON.stringify(data)}`);
                     }
+                    // Успіх, UI вже оновлено
                 })
                 .catch(err => {
-                    console.error(`Failed to update pin ${pin} state. Restoring previous state.`, err);
-                    // У разі помилки, повертаємо чекбокс до попереднього стану
-                    event.target.checked = !event.target.checked; 
+                    console.error(`Failed to update pin ${pin}. Reverting UI.`, err);
+                    // Відкат UI у разі помилки
+                    event.target.checked = !event.target.checked; // Повертаємо чекбокс
+                    if (pinElement) {
+                        const statusElement = pinElement.querySelector('.pin-status');
+                        if (statusElement) {
+                            const isPinOn = oldState === 1;
+                            statusElement.textContent = isPinOn ? 'ON' : 'OFF';
+                            statusElement.classList.toggle('green', isPinOn);
+                            statusElement.classList.toggle('red', !isPinOn);
+                        }
+                    }
                 });
             });
         });
