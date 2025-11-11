@@ -477,6 +477,21 @@ function getLocalNetworkAddresses() {
   return addresses;
 }
 
+const uploadDir = "./upload";
+app.get("/files", (req, res) => {
+  try {
+    const files = fs.readdirSync(uploadDir);
+    const links = files.map(f => `<li><a href="/upload/${f}">${f}</a></li>`).join("");
+    res.send(`<h3>Вміст папки /upload</h3><ul>${links}</ul>`);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Помилка при читанні папки");
+  }
+});
+
+// Дозволяємо відкривати файли напряму
+app.use("/upload", express.static(uploadDir));
+
 // Bind explicitly to 0.0.0.0 so the server accepts connections from the LAN (e.g. ESP device).
 app.listen(PORT, '0.0.0.0', () => {
   const localUrl = `http://localhost:${PORT}`;
