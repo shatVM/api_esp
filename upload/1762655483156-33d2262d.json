@@ -14,7 +14,7 @@
     "rssi_dbm": -58,
     "device": "esp8266_12E",
     "lux": 148,
-    "temperature_dht_c": 23.4,
+    "temperature_dht_c": 23.7,
     "humidity_dht_pct": 45,
     "battery_v": 3.861
   }

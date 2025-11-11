@@ -107,9 +107,9 @@ app.post('/upload', (req, res) => {
   console.log(`Saved upload record to ${filePath}`);
   // Повідомляємо клієнтів SSE про нове завантаження
   try {
-      // Надсилаємо подію 'new' з повним записом даних
+      // Надсилаємо подію 'new' з даними датчиків
       // Це дозволить клієнтам оновити інтерфейс
-      sendSseEvent('new', record);
+      sendSseEvent('new', record.data);
     } catch (e) { console.error('Error sending SSE event during upload:', e); }
   // include filename in response
   return res.status(200).json({ status: 'ok', savedTo: 'received.json', uploadFile: filename });

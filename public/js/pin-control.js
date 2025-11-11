@@ -204,14 +204,10 @@ function setupRealtimeSensorUpdates() {
     };
 
     // Ця подія надсилається з сервера щоразу, коли надходить новий пакет даних
-    source.addEventListener('new', async function(event) {
-        console.log("New data received via SSE. Fetching latest sensor values...");
+    source.addEventListener('new', function(event) {
+        console.log("New data received via SSE.");
         try {
-            const response = await fetch('/api/latest-data');
-            if (!response.ok) {
-                throw new Error(`Failed to fetch latest data: ${response.status}`);
-            }
-            const data = await response.json();
+            const data = JSON.parse(event.data);
 
             // Оновлюємо значення на сторінці
             const tempEl = document.getElementById('sensor-temp');
@@ -220,7 +216,6 @@ function setupRealtimeSensorUpdates() {
             const batteryEl = document.getElementById('sensor-battery');
             const batteryItemEl = document.getElementById('battery-item');
 
-            // Використовуємо '??' для відображення 'N/A', якщо дані відсутні
             if (tempEl) tempEl.textContent = formatSensorValue(data.temperature_dht_c, '°C');
             if (humidEl) humidEl.textContent = formatSensorValue(data.humidity_dht_pct, '%');
             if (luxEl) luxEl.textContent = formatSensorValue(data.lux, 'lux');
@@ -233,7 +228,7 @@ function setupRealtimeSensorUpdates() {
                 batteryItemEl.style.setProperty('--battery-level-pct', `${percentage}%`);
             }
         } catch (error) {
-            console.error("Error updating sensor data:", error);
+            console.error("Error processing SSE data:", error);
         }
     });
 
