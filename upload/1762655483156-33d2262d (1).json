@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "id": "1762655483156-33d2262d",
+    "time": "2025-11-09T02:31:23.156Z",
+    "ip": "192.168.1.208",
+    "method": "POST",
+    "url": "/upload"
+  },
+  "data": {
+    "ip": "192.168.1.208",
+    "uptime_ms": 570235,
+    "public_ip": "46.211.97.197",
+    "gateway_ip": "192.168.1.1",
+    "rssi_dbm": -58,
+    "device": "esp8266_12E",
+    "lux": 148,
+    "temperature_dht_c": 23.7,
+    "humidity_dht_pct": 45,
+    "battery_v": 3.861
+  }
+}

@@ -39,10 +39,10 @@ DHT dht(DHTPIN, DHTTYPE);
 const int ADC_PIN = A0;
 // Коефіцієнт дільника напруги. Розрахунок: (R1 + R2) / R2.
 // ESP8266 вимірює до 1.0V на піні A0. Дільник потрібен, щоб знизити напругу батареї.
-// Наприклад, для R1=320kОм, R2=100kОм, коефіцієнт = (320+100)/100 = 4.2.
+// Наприклад, для R1=300kОм, R2=100kОм, коефіцієнт = (300+100)/100 = 4.0.
 // Налаштуйте це значення відповідно до вашої схеми!
-const float VOLTAGE_DIVIDER_RATIO = 4.2; 
-
+// Розрахунок для дільника 400кОм + 100кОм: (400 + 100) / 100 = 5.0
+const float VOLTAGE_DIVIDER_RATIO = 5.0; 
 
 // --- Глобальні об'єкти ---
 ESP8266WebServer espServer(80);
@@ -166,10 +166,20 @@ void sendDataToServer() {
     jsonDoc["humidity_dht_pct"] = humidity;
   }
   
-  // Читаємо та розраховуємо реальну напругу батареї
-  int adcValue = analogRead(ADC_PIN);
+  // Читаємо та розраховуємо реальну напругу батареї, усереднюючи результат
+  const int NUM_SAMPLES = 10;
+  long adcTotal = 0;
+  for (int i = 0; i < NUM_SAMPLES; i++) {
+    adcTotal += analogRead(ADC_PIN);
+    delay(2); // Коротка пауза для стабілізації АЦП
+  }
+  int adcValue = adcTotal / NUM_SAMPLES;
+  
+  Serial.printf("Raw ADC Value (Averaged): %d\n", adcValue); // Виводимо усереднене значення
+
   // Перетворюємо значення АЦП (0-1023) у напругу, враховуючи дільник
   float batteryVoltage = adcValue / 1023.0 * VOLTAGE_DIVIDER_RATIO;
+  Serial.printf("Calculated Battery Voltage: %.2fV\n", batteryVoltage); // Виводимо розраховану напругу
   jsonDoc["battery_v"] = batteryVoltage;
 
   String jsonString;
@@ -226,7 +236,7 @@ void sendDataToServer() {
   } else {
     Serial.println("Failed to send data to both public and local servers.");
   }
-  Serial.println("--------------------");
+  Serial.println("-------------------- ");
 }
 
 

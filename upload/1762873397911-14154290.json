@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "id": "1762873397911-14154290",
+    "time": "2025-11-11T15:03:17.911Z",
+    "ip": "127.0.0.1",
+    "method": "POST",
+    "url": "/upload"
+  },
+  "data": {
+    "ip": "192.168.130.124",
+    "uptime_ms": 29939,
+    "public_ip": "91.229.123.225",
+    "gateway_ip": "192.168.128.4",
+    "rssi_dbm": -59,
+    "deviceName": "esp8266_12E",
+    "lux": 176,
+    "macAddress": "08:3A:8D:E7:E1:38",
+    "cpuFreqMHz": 80,
+    "flashSizeMB": 4,
+    "sdkVersion": "2.2.2-dev(38a443e)",
+    "ssid": "FreeZSTU",
+    "channel": 10,
+    "chipModel": "ESP8266",
+    "temperature_dht_c": 24.4,
+    "humidity_dht_pct": 42.9,
+    "battery_v": 0.332551
+  }
+}
