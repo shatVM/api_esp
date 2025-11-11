@@ -120,8 +120,8 @@ function createListItem(it) {
                 <small class="device-ip">📍 ${escapeHtml(ip)}</small><br/>
                 <small class="upload-time">🕒 ${new Date(it.time).toLocaleString()}</small>
                 <div class="sensor-preview">
-                    <small class="sensor ${!it.sensors?.temperature_aht ? 'empty' : ''}"> 🌡️ ${it.sensors?.temperature_aht ?? '--°C'} </small>
-                    <small class="sensor ${!it.sensors?.humidity_aht ? 'empty' : ''}"> 💧 ${it.sensors?.humidity_aht !== null ? `${it.sensors.humidity_aht}%` : '--%'} </small>
+                    <small class="sensor ${!it.sensors?.temperature_dht ? 'empty' : ''}"> 🌡️ ${it.sensors?.temperature_dht ?? '--°C'} </small>
+                    <small class="sensor ${!it.sensors?.humidity_dht ? 'empty' : ''}"> 💧 ${it.sensors?.humidity_dht !== null ? `${it.sensors.humidity_dht}%` : '--%'} </small>
                     <small class="sensor ${!it.sensors?.lux ? 'empty' : ''}"> ☀️ ${it.sensors?.lux !== null ? `${it.sensors.lux} lux` : '-- lux'} </small>
                 </div>
             </div>
@@ -131,8 +131,19 @@ function createListItem(it) {
         </div>
     `;
 
-    // Клік по елементу — завантажити деталі
-    li.addEventListener('click', () => loadDetail(it.id, li));
+    // Клік по елементу — показати деталі в detailView
+    li.addEventListener('click', () => {
+        document.querySelectorAll('#uploadList li').forEach(x => x.classList.remove('active'));
+        li.classList.add('active');
+
+        const detailView = document.getElementById('detailView');
+        if (detailView) {
+            const tooltip = li.querySelector('.device-tooltip');
+            if (tooltip) {
+                detailView.innerHTML = tooltip.innerHTML;
+            }
+        }
+    });
 
     // Кнопка видалення — stopPropagation, щоб не спрацьовував li click
     const delBtn = li.querySelector('.del');
@@ -143,7 +154,7 @@ function createListItem(it) {
         });
     }
 
-    // Tooltip element (прихований за замовчуванням через CSS)
+    // Tooltip element (служить як шаблон для detailView)
     const tooltip = document.createElement('div');
     tooltip.className = 'device-tooltip';
     tooltip.innerHTML = `
@@ -168,17 +179,8 @@ function createListItem(it) {
             <tr><td>Uptime:</td><td>⏱️ ${it.sensors?.uptime !== null ? `${escapeHtml(it.sensors.uptime)}ms` : '<span class="no-data">No data</span>'}</td></tr>
         </table>
     `;
-
-    // show tooltip on hover (при використанні делегування, цей блок можна прибрати)
-    li.addEventListener('mouseenter', (ev) => {
-        // position the tooltip relative to li
-        li.appendChild(tooltip);
-        tooltip.setAttribute('aria-hidden', 'false');
-    });
-    li.addEventListener('mouseleave', (ev) => {
-        tooltip.setAttribute('aria-hidden', 'true');
-        if (tooltip.parentElement === li) li.removeChild(tooltip);
-    });
+    tooltip.style.display = 'none'; // Ховаємо, бо він тепер шаблон
+    li.appendChild(tooltip);
 
     return li;
 }
@@ -455,23 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteAllBtn.addEventListener('click', deleteAllItems);
     }
 
-    // 5. Делеговані обробники наведення для спливаючих підказок (tooltip)
-    const uploadList = document.getElementById('uploadList');
-    if (uploadList) {
-        uploadList.addEventListener('mouseover', (ev) => {
-            const li = ev.target.closest && ev.target.closest('li.device-item');
-            if (!li) return;
-            const tt = li.querySelector('.device-tooltip');
-            if (tt) tt.setAttribute('aria-hidden', 'false');
-        });
-
-        uploadList.addEventListener('mouseout', (ev) => {
-            const li = ev.target.closest && ev.target.closest('li.device-item');
-            if (!li) return;
-            const tt = li.querySelector('.device-tooltip');
-            if (tt) tt.setAttribute('aria-hidden', 'true');
-        });
-    }
+    // 5. (Placeholder for potential future event handlers)
 
     // --- Обробка подій Server-Sent Events (SSE) ---
     if (!!window.EventSource) {

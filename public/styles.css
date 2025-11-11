@@ -82,7 +82,7 @@ body {
 .device-tooltip {
   position: absolute;
   z-index: 100;
-  left: 320px; /* offset so it doesn't overlap the sidebar */
+  left: 8px; /* offset so it doesn't overlap the sidebar */
   top: 8px;
   width: 360px;
   max-width: calc(100% - 40px);
