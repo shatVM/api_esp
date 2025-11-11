@@ -81,7 +81,7 @@ body {
 /* floating tooltip that appears on hover */
 .device-tooltip {
   position: absolute;
-  z-index: 30;
+  z-index: 100;
   left: 320px; /* offset so it doesn't overlap the sidebar */
   top: 8px;
   width: 360px;
@@ -107,6 +107,8 @@ body {
   background-color: #f8f9fa;
   border-color: #adb5bd;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  overflow: visible;
+  z-index: 50;
 }
 
 .device-item .device-tooltip[aria-hidden="false"] {
@@ -210,6 +212,7 @@ empty .list-row {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   padding: 12px;
+  max-width: 400px;
 }
 
 .sidebar h2 {
