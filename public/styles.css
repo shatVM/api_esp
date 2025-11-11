@@ -714,6 +714,13 @@ input:checked + .slider:before {
   color: #1877f2;
 }
 
+.sensor-item.disabled {
+  opacity: 0.5;
+  text-decoration: line-through;
+  cursor: pointer;
+}
+
+
 /* Нова візуалізація для батареї */
 #battery-item {
   position: relative;
@@ -725,4 +732,46 @@ input:checked + .slider:before {
     #ffffff
   );
   transition: background 0.5s ease-in-out;
+}
+
+.chart-controls {
+  width: 100%;
+  padding: 15px 0;
+  margin-top: 10px;
+}
+
+.chart-controls .slider {
+  width: 100%;
+  position: relative;
+  cursor: pointer;
+  height: 15px;
+  -webkit-appearance: none;
+  background: #eee;
+  border-radius: 5px;
+  outline: none;
+  opacity: 0.7;
+  -webkit-transition: .2s;
+  transition: opacity .2s;
+}
+
+.chart-controls .slider:hover {
+  opacity: 1;
+}
+
+.chart-controls .slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 25px;
+  height: 25px;
+  background: #1877f2;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.chart-controls .slider::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  background: #1877f2;
+  cursor: pointer;
+  border-radius: 50%;
 }

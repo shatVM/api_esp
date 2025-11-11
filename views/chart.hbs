@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP Chart</title>
+    <meta name="theme-color" content="#1877f2"/>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    {{> nav}}
+    
+    <div class="container">
+        <div class="three-col" style="grid-template-columns: 1fr; max-width: 800px; margin: auto;">
+            <aside class="sidebar">
+                <div id="PIN_control">
+                    
+                    <div id="SensorInfo">
+                    <h2>Графік показників</h2>
+                    <div class="sensor-grid">
+                        <div class="sensor-item" data-dataset-index="0">
+                            <span class="sensor-label">🌡️ Температура</span>
+                            
+                        </div>
+                        <div class="sensor-item" data-dataset-index="1">
+                            <span class="sensor-label">💧 Вологість</span>
+                        </div>
+                        <div class="sensor-item" data-dataset-index="2">
+                            <span class="sensor-label">☀️ Освітленість</span>
+                        </div>
+                        <div id="battery-item" class="sensor-item" data-dataset-index="3">
+                            <span class="sensor-label">🔋 Батарея</span>
+                        </div>
+                    </div>
+                </div>
+                    <canvas id="sensorChart"></canvas>
+                    <div class="chart-controls">
+                        <label for="dataPoints">Кількість точок: <span id="dataPointsValue">10</span></label>
+                        <input type="range" id="dataPoints" min="5" max="100" value="10" class="slider">
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+    
+    <script src="/js/chart.js"></script>
+</body>
+</html>

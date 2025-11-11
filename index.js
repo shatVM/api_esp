@@ -454,6 +454,32 @@ app.post('/api/pins/:pin', async (req, res) => {
   }
 });
 
+app.get('/chart', (req, res) => {
+    return res.render('chart');
+});
+
+app.get('/api/history', (req, res) => {
+    try {
+        const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
+        const history = files.map(f => {
+            try {
+                const raw = fs.readFileSync(path.join(UPLOAD_DIR, f), 'utf8');
+                const parsed = JSON.parse(raw);
+                return {
+                    timestamp: parsed?.meta?.time || null,
+                    ...parsed.data
+                };
+            } catch (e) {
+                return null;
+            }
+        }).filter(Boolean).sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+        res.json(history);
+    } catch (e) {
+        console.error('Failed to get history data for API:', e);
+        res.status(500).json({ error: 'Failed to read history data' });
+    }
+});
+
 // Global error handlers for uncaught errors
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
