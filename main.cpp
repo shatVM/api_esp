@@ -38,9 +38,9 @@ const int SERVER_PORT = 80;                       // Порт вашого се�
 const unsigned long UPLOAD_INTERVAL = 30000; // 30 секунд
 
 // Піни, якими можна керувати
-const int PIN_5 = 5; // D1
-const int PIN_6 = 12; // D6 (приклад, змініть на потрібний)
-const int PIN_7 = 13; // D7 (приклад, змініть на потрібний)
+const int PIN_12 = 12; // D6
+const int PIN_13 = 13; // D7
+const int PIN_14 = 14; // D5
 
 // --- 2. ГЛОБАЛЬНІ ОБ'ЄКТИ ---
 ESP8266WebServer espServer(80); // Веб-сервер на ESP для прийому команд
@@ -60,7 +60,7 @@ void handleControl() {
     state = espServer.arg("state").toInt();
 
     // Перевіряємо валідність параметрів
-    if ((pin == PIN_5 || pin == PIN_6 || pin == PIN_7) && (state == 0 || state == 1)) {
+    if ((pin == PIN_12 || pin == PIN_13 || pin == PIN_14) && (state == 0 || state == 1)) {
       Serial.printf("Control Request: Set pin %d to state %d\n", pin, state);
       
       pinMode(pin, OUTPUT);
@@ -127,13 +127,13 @@ void setup() {
   Serial.println("\nESP8266 Starting...");
 
   // Ініціалізація пінів як виходів
-  pinMode(PIN_5, OUTPUT);
-  pinMode(PIN_6, OUTPUT);
-  pinMode(PIN_7, OUTPUT);
+  pinMode(PIN_12, OUTPUT);
+  pinMode(PIN_13, OUTPUT);
+  pinMode(PIN_14, OUTPUT);
   // Встановлюємо початковий стан (вимкнено)
-  digitalWrite(PIN_5, LOW);
-  digitalWrite(PIN_6, LOW);
-  digitalWrite(PIN_7, LOW);
+  digitalWrite(PIN_12, LOW);
+  digitalWrite(PIN_13, LOW);
+  digitalWrite(PIN_14, LOW);
 
   // Підключення до Wi-Fi
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);

@@ -402,10 +402,9 @@ app.get('/api/pins/:pin', (req, res) => {
 
 // Створюємо мапування логічних пінів на реальні GPIO
 const pinMapping = {
-  '4': 4,
-  '5': 5,
-  '6': 12,
-  '7': 13,
+  '12': 12,
+  '13': 13,
+  '14': 14,
 };
 
 // Endpoint to update the state of a specific pin
