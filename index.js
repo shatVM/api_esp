@@ -62,23 +62,60 @@ app.use((req, res, next) => {
 // Зберігаємо останню відому IP-адресу пристрою
 let lastKnownIp = null;
 
-app.post('/upload', (req, res) => {
+const CONFIG_FILE = path.join(__dirname, 'config.json');
+let config = {
+  enableAutoLight: false,
+  lightThreshold: 40,
+  uploadIntervalSeconds: 30
+};
+
+// Завантажуємо конфігурацію при старті
+try {
+  if (fs.existsSync(CONFIG_FILE)) {
+    const rawConfig = fs.readFileSync(CONFIG_FILE, 'utf8');
+    config = JSON.parse(rawConfig);
+    console.log('Configuration loaded:', config);
+  } else {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+    console.log('Default configuration created.');
+  }
+} catch (e) {
+  console.error('Failed to load or create config file:', e);
+}
+
+// Endpoint to get the current config
+app.get('/api/config', (req, res) => {
+  res.json(config);
+});
+
+// Endpoint to update the config
+app.post('/api/config', (req, res) => {
+  try {
+    // Валідація та оновлення
+    const newConfig = req.body;
+    config.enableAutoLight = !!newConfig.enableAutoLight;
+    if (typeof newConfig.lightThreshold === 'number') {
+      config.lightThreshold = newConfig.lightThreshold;
+    }
+    if (typeof newConfig.uploadIntervalSeconds === 'number') {
+      config.uploadIntervalSeconds = newConfig.uploadIntervalSeconds;
+    }
+    
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+    console.log('Configuration updated:', config);
+    res.json({ status: 'ok', config });
+  } catch (e) {
+    console.error('Failed to write config:', e);
+    res.status(500).json({ error: 'failed to write config' });
+  }
+});
+
+
+app.post('/upload', async (req, res) => {
   try {
     const data = req.body;
     console.log('Received upload from ESP at', new Date().toISOString());
-    // Log a concise preview plus full JSON at debug level
-    try {
-      const preview = JSON.stringify(data).slice(0, 1000);
-      // console.log('Upload preview:', preview + (preview.length >= 1000 ? '... (truncated)' : ''));
-      // console.log('Full payload:', JSON.stringify(data, null, 2));
-    } catch (jerr) {
-      console.log('Failed to stringify upload payload:', jerr);
-    }
-    // Логуємо тіло запиту
-    // console.log(`[${new Date().toISOString()}] Request body for ${req.method} ${req.originalUrl}:`);
-    // console.log(JSON.stringify(data, null, 2));
 
-    // Оновлюємо останню відому IP-адресу з тіла запиту або з інформації про з'єднання
     if (data.ip) {
         lastKnownIp = data.ip;
         console.log(`[IP Update] Last known ESP IP updated to: ${lastKnownIp}`);
@@ -88,38 +125,46 @@ app.post('/upload', (req, res) => {
     fs.writeFileSync(outPath, JSON.stringify(data, null, 2), 'utf8');
     console.log(`Saved received payload to ${outPath}`);
 
-    // Also save each upload as its own file with metadata in upload/
-    try {
-      const id = Date.now().toString() + '-' + crypto.randomBytes(4).toString('hex');
-      const filename = `${id}.json`;
-      const filePath = path.join(UPLOAD_DIR, filename);
-      const record = {
-        meta: {
-          id,
-          time: new Date().toISOString(),
-          ip: req.ip,
-          method: req.method,
-          url: req.originalUrl
-        },
-        data
-      };
-  fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf8');
-  console.log(`Saved upload record to ${filePath}`);
-  // Повідомляємо клієнтів SSE про нове завантаження
-  try {
-      // Надсилаємо подію 'new' з даними датчиків
-      // Це дозволить клієнтам оновити інтерфейс
-      sendSseEvent('new', record.data);
-    } catch (e) { console.error('Error sending SSE event during upload:', e); }
-  // include filename in response
-  return res.status(200).json({ status: 'ok', savedTo: 'received.json', uploadFile: filename });
-    } catch (wfErr) {
-      console.error('Failed to write upload file:', wfErr);
-      return res.status(500).json({ status: 'error', message: 'Failed to save upload file' });
+    const id = Date.now().toString() + '-' + crypto.randomBytes(4).toString('hex');
+    const filename = `${id}.json`;
+    const filePath = path.join(UPLOAD_DIR, filename);
+    const record = {
+      meta: { id, time: new Date().toISOString(), ip: req.ip, method: req.method, url: req.originalUrl },
+      data
+    };
+    fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf8');
+    console.log(`Saved upload record to ${filePath}`);
+
+    sendSseEvent('new', record.data);
+
+    // --- Auto-light Logic ---
+    if (config.enableAutoLight && data.lux !== undefined) {
+      const desiredState = data.lux < config.lightThreshold ? 1 : 0;
+      
+      let currentPinStates = {};
+      if (fs.existsSync(PINS_STATE_FILE)) {
+        currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+      }
+      
+      if (currentPinStates.pin12 !== desiredState) {
+        console.log(`[Auto-Light] Lux is ${data.lux}, threshold is ${config.lightThreshold}. Changing pin12 to ${desiredState}`);
+        await updatePinState('pin12', desiredState);
+      }
     }
+    // --- End Auto-light Logic ---
+
+    return res.status(200).json({ 
+      status: 'ok', 
+      uploadFile: filename,
+      uploadIntervalSeconds: config.uploadIntervalSeconds 
+    });
+
   } catch (err) {
     console.error('Error handling /upload:', err);
-    res.status(500).json({ status: 'error', message: err.message });
+    // Avoid crashing on file write errors, etc.
+    if (!res.headersSent) {
+      res.status(500).json({ status: 'error', message: err.message });
+    }
   }
 });
 
@@ -407,49 +452,57 @@ const pinMapping = {
   '14': 14,
 };
 
+/**
+ * Updates the state of a specific pin, saves it, and sends the command to the ESP.
+ * @param {string} pinName - The name of the pin (e.g., 'pin12').
+ * @param {0 | 1} state - The new state (0 for OFF, 1 for ON).
+ */
+async function updatePinState(pinName, state) {
+  const logicalPinNumber = pinName.replace('pin', '');
+  const gpioPinNumber = pinMapping[logicalPinNumber] || logicalPinNumber;
+
+  if (state !== 0 && state !== 1) {
+    throw new Error('Invalid state. Must be 0 or 1.');
+  }
+
+  let pins = {};
+  if (fs.existsSync(PINS_STATE_FILE)) {
+    pins = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+  }
+
+  pins[pinName] = state;
+  fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(pins, null, 2), 'utf8');
+  console.log(`[Pin Control] Set pin ${pinName} state to ${state} in pins.json`);
+
+  if (lastKnownIp) {
+    const espUrl = `http://${lastKnownIp}/control?pin=${gpioPinNumber}&state=${state}`;
+    console.log(`[Pin Control] Sending command to ESP: ${espUrl}`);
+    try {
+      const espResponse = await fetch(espUrl, { method: 'GET', timeout: 5000 });
+      if (!espResponse.ok) {
+        console.error(`[Pin Control] ESP returned status: ${espResponse.status}`);
+      } else {
+        console.log('[Pin Control] Successfully sent command to ESP.');
+      }
+    } catch (espError) {
+      console.error(`[Pin Control] Failed to send command to ESP8266 at ${lastKnownIp}:`, espError.message);
+    }
+  } else {
+    console.warn('[Pin Control] Cannot send command to ESP: IP address is unknown.');
+  }
+  return { status: 'ok', state, sentToEsp: !!lastKnownIp };
+}
+
+
 // Endpoint to update the state of a specific pin
 app.post('/api/pins/:pin', async (req, res) => {
-  const pinName = req.params.pin;
-  const logicalPinNumber = pinName.replace('pin', ''); // Отримуємо логічний номер, наприклад "6"
-  const gpioPinNumber = pinMapping[logicalPinNumber] || logicalPinNumber; // Перетворюємо на реальний GPIO
   try {
     const { state } = req.body;
-    if (state === 0 || state === 1) {
-      let pins = {};
-      if (fs.existsSync(PINS_STATE_FILE)) {
-        pins = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
-      }
-      pins[pinName] = state;
-      fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(pins), 'utf8');
-      console.log(`[Pin Control] Set pin ${pinName} state to ${state} in pins.json`);
-
-      // Надсилаємо команду на ESP8266, якщо відома IP-адреса
-      if (lastKnownIp) {
-        const espUrl = `http://${lastKnownIp}/control?pin=${gpioPinNumber}&state=${state}`;
-        console.log(`[Pin Control] Sending command to ESP: ${espUrl}`);
-        // Не чекаємо на відповідь від ESP, щоб не блокувати запит
-        fetch(espUrl, { method: 'GET', timeout: 5000 })
-          .then(espResponse => {
-            if (!espResponse.ok) {
-              console.error(`[Pin Control] ESP returned status: ${espResponse.status}`);
-            } else {
-              console.log('[Pin Control] Successfully sent command to ESP.');
-            }
-          })
-          .catch(espError => {
-            console.error(`[Pin Control] Failed to send command to ESP8266 at ${lastKnownIp}:`, espError.message);
-          });
-      } else {
-        console.warn('[Pin Control] Cannot send command to ESP: IP address is unknown.');
-      }
-
-      res.json({ status: 'ok', state, sentToEsp: !!lastKnownIp });
-    } else {
-      res.status(400).json({ error: 'invalid state' });
-    }
+    const result = await updatePinState(req.params.pin, state);
+    res.json(result);
   } catch (e) {
-    console.error(`[Pin Control] Failed to write pin ${pinName} state:`, e);
-    res.status(500).json({ error: `failed to write pin ${pinName} state` });
+    console.error(`[Pin Control] Failed to write pin ${req.params.pin} state:`, e);
+    res.status(500).json({ error: `failed to write pin ${req.params.pin} state` });
   }
 });
 

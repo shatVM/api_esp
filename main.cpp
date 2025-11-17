@@ -35,7 +35,7 @@ const char* SERVER_IP = "192.168.1.115";         // <-- IP-адреса комп
 const int SERVER_PORT = 80;                       // Порт вашого сервера
 
 // Інтервал відправки даних на сервер (в мілісекундах)
-const unsigned long UPLOAD_INTERVAL = 30000; // 30 секунд
+unsigned long UPLOAD_INTERVAL = 30000; // 30 секунд
 
 // Піни, якими можна керувати
 const int PIN_12 = 12; // D6
@@ -114,6 +114,24 @@ void sendDataToServer() {
     String payload = http.getString();
     Serial.printf("HTTP Response code: %d\n", httpCode);
     Serial.println("Response: " + payload);
+
+    // Парсимо відповідь, щоб оновити інтервал
+    DynamicJsonDocument responseDoc(256);
+    DeserializationError error = deserializeJson(responseDoc, payload);
+
+    if (!error) {
+      if (responseDoc.containsKey("uploadIntervalSeconds")) {
+        unsigned long newIntervalSeconds = responseDoc["uploadIntervalSeconds"];
+        // Встановлюємо мінімальний інтервал, щоб уникнути спаму
+        if (newIntervalSeconds >= 5) {
+          UPLOAD_INTERVAL = newIntervalSeconds * 1000;
+          Serial.printf("Updated UPLOAD_INTERVAL to %lu ms\n", UPLOAD_INTERVAL);
+        }
+      }
+    } else {
+      Serial.printf("Failed to parse response payload: %s\n", error.c_str());
+    }
+
   } else {
     Serial.printf("HTTP POST failed, error: %s\n", http.errorToString(httpCode).c_str());
   }

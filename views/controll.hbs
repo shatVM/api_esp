@@ -38,6 +38,26 @@
                     </div>
                 </div>
                 {{/if}}
+
+                <div id="AutoControlSettings">
+                    <h2>Автоматичне керування</h2>
+                    <form id="configForm">
+                        <div class="form-switch">
+                            <input type="checkbox" id="enableAutoLight" name="enableAutoLight">
+                            <label for="enableAutoLight">Увімкнути авто-освітлення (пін 12)</label>
+                        </div>
+                        <div class="form-group">
+                            <label for="lightThreshold">Поріг освітлення (lux)</label>
+                            <input type="number" id="lightThreshold" name="lightThreshold" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="uploadIntervalSeconds">Інтервал оновлення (сек)</label>
+                            <input type="number" id="uploadIntervalSeconds" name="uploadIntervalSeconds" class="form-control">
+                        </div>
+                        <button type="submit" class="btn">Зберегти</button>
+                    </form>
+                </div>
+
                 <!-- Приховані перемикачі, необхідні для логіки -->
                 <div style="display: none;">
                     <input type="checkbox" id="pin12Switch" />

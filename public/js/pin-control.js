@@ -148,8 +148,69 @@ function initializePinControl() {
 // Ініціалізуємо логіку, коли DOM буде готовий
 document.addEventListener('DOMContentLoaded', () => {
     initializePinControl();
+    initializeConfigControl(); // Додаємо ініціалізацію форми конфігурації
     setupRealtimeSensorUpdates(); // Додаємо ініціалізацію оновлень
 });
+
+/**
+ * Ініціалізує логіку для форми конфігурації.
+ */
+function initializeConfigControl() {
+    const form = document.getElementById('configForm');
+    if (!form) return;
+
+    const enableAutoLightEl = document.getElementById('enableAutoLight');
+    const lightThresholdEl = document.getElementById('lightThreshold');
+    const uploadIntervalEl = document.getElementById('uploadIntervalSeconds');
+
+    // 1. Завантажуємо поточну конфігурацію
+    async function fetchConfig() {
+        try {
+            const res = await fetch('/api/config');
+            if (!res.ok) throw new Error('Failed to fetch config');
+            const config = await res.json();
+
+            // 2. Заповнюємо форму
+            enableAutoLightEl.checked = config.enableAutoLight;
+            lightThresholdEl.value = config.lightThreshold;
+            uploadIntervalEl.value = config.uploadIntervalSeconds;
+        } catch (e) {
+            console.error('Could not load config:', e);
+        }
+    }
+
+    // 3. Обробник відправки форми
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault(); // Зупиняємо стандартну відправку
+
+        const newConfig = {
+            enableAutoLight: enableAutoLightEl.checked,
+            lightThreshold: parseInt(lightThresholdEl.value, 10),
+            uploadIntervalSeconds: parseInt(uploadIntervalEl.value, 10)
+        };
+
+        try {
+            const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newConfig)
+            });
+
+            if (!res.ok) throw new Error('Server returned an error');
+            
+            console.log('Configuration saved successfully!');
+            // Можна додати повідомлення для користувача
+            alert('Налаштування збережено!');
+
+        } catch (e) {
+            console.error('Failed to save config:', e);
+            alert('Помилка при збереженні налаштувань.');
+        }
+    });
+
+    fetchConfig(); // Завантажуємо конфігурацію при завантаженні сторінки
+}
+
 
 /**
  * Форматує числове значення до одного знаку після коми.
