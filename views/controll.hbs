@@ -39,6 +39,31 @@
                 </div>
                 {{/if}}
 
+                <div id="PIN_сontrol">
+                    <h2>PIN State</h2>
+                    <div id="pinState">
+                      <div class="pin" data-pin="pin12">
+                        <span class="pin-label">PIN 12 (D6)</span>
+                        <span class="pin-status red">OFF</span>
+                      </div>
+                      <div class="pin" data-pin="pin13">
+                        <span class="pin-label">PIN 13 (D7)</span>
+                        <span class="pin-status red">OFF</span>
+                      </div>
+                      <div class="pin" data-pin="pin14">
+                        <span class="pin-label">PIN 14 (D5)</span>
+                        <span class="pin-status red">OFF</span>
+                      </div>
+                    </div>
+                </div>
+
+                <!-- Приховані перемикачі, необхідні для логіки -->
+                <div style="display: none;">
+                    <input type="checkbox" id="pin12Switch" />
+                    <input type="checkbox" id="pin13Switch" />
+                    <input type="checkbox" id="pin14Switch" />
+                </div>
+
                 <div id="AutoControlSettings">
                     <h2>Автоматичне керування</h2>
                     <form id="configForm">
@@ -56,31 +81,6 @@
                         </div>
                         <button type="submit" class="btn">Зберегти</button>
                     </form>
-                </div>
-
-                <!-- Приховані перемикачі, необхідні для логіки -->
-                <div style="display: none;">
-                    <input type="checkbox" id="pin12Switch" />
-                    <input type="checkbox" id="pin13Switch" />
-                    <input type="checkbox" id="pin14Switch" />
-                </div>
-    
-                <div id="PIN_сontrol">
-                    <h2>PIN State</h2>
-                    <div id="pinState">
-                      <div class="pin" data-pin="pin12">
-                        <span class="pin-label">PIN 12 (D6)</span>
-                        <span class="pin-status red">OFF</span>
-                      </div>
-                      <div class="pin" data-pin="pin13">
-                        <span class="pin-label">PIN 13 (D7)</span>
-                        <span class="pin-status red">OFF</span>
-                      </div>
-                      <div class="pin" data-pin="pin14">
-                        <span class="pin-label">PIN 14 (D5)</span>
-                        <span class="pin-status red">OFF</span>
-                      </div>
-                    </div>
                 </div>
             </aside>
         </div>
