@@ -1,5 +1,5 @@
 {
-  "enableAutoLight": false,
+  "enableAutoLight": true,
   "lightThreshold": 40,
-  "uploadIntervalSeconds": 30
+  "uploadIntervalSeconds": 10
 }

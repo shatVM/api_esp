@@ -1,0 +1,55 @@
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Налаштування - ESP Receiver</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet" />
+</head>
+<body>
+    {{> nav}}
+
+    <div class="container">
+        <h2>Налаштування</h2>
+        <p>Тут ви можете керувати налаштуваннями пристрою та системи.</p>
+
+        <div class="three-col" style="grid-template-columns: 1fr; max-width: 600px; margin: auto;">
+            <aside class="sidebar">
+                <div id="AutoControlSettings">
+                    <h2>Автоматичне керування</h2>
+                    <form id="configForm">
+                        <div class="form-switch">
+                            <input type="checkbox" id="enableAutoLight" name="enableAutoLight">
+                            <label for="enableAutoLight">Увімкнути авто-освітлення (пін 12)</label>
+                        </div>
+                        <div class="form-group">
+                            <label for="lightThreshold">Поріг освітлення (lux)</label>
+                            <input type="number" id="lightThreshold" name="lightThreshold" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="uploadIntervalSeconds">Інтервал оновлення (сек)</label>
+                            <input type="number" id="uploadIntervalSeconds" name="uploadIntervalSeconds" class="form-control">
+                        </div>
+                        <button type="submit" class="btn">Зберегти</button>
+                    </form>
+                </div>
+
+                <div class="card" style="margin-top: 2rem;">
+                    <div class="card-body">
+                        <h5 class="card-title">Загальні налаштування</h5>
+                        <form>
+                            <div class="form-group">
+                                <label for="deviceName">Назва пристрою</label>
+                                <input type="text" class="form-control" id="deviceName" placeholder="ESP8266 Controller">
+                            </div>
+                            <button type="submit" class="btn btn-primary mt-3">Зберегти</button>
+                        </form>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script src="/js/pin-control.js"></script>
+</body>
+</html>

@@ -510,6 +510,10 @@ app.get('/chart', (req, res) => {
     return res.render('chart');
 });
 
+app.get('/settings', (req, res) => {
+    return res.render('settings');
+});
+
 app.get('/api/history', (req, res) => {
     try {
         const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
