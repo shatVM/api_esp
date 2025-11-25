@@ -23,7 +23,8 @@
       "upload/*",
       "public/*",
       "received.json",
-      "pins.json"
+      "pins.json",
+      "config.json"
     ]
   }
 }

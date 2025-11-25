@@ -38,6 +38,44 @@ function isValidUrl(value) {
   }
 }
 
+// Update the current time display in UTC+2
+function updateCurrentTimeUTC2() {
+  const el = document.getElementById('currentTime');
+  if (!el) return;
+  const now = new Date();
+  // compute UTC ms and add +2 hours
+  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const tzDate = new Date(utcMs + 2 * 3600000);
+  const pad = (n) => String(n).padStart(2, '0');
+  const formatted = `${tzDate.getFullYear()}-${pad(tzDate.getMonth()+1)}-${pad(tzDate.getDate())} ${pad(tzDate.getHours())}:${pad(tzDate.getMinutes())}:${pad(tzDate.getSeconds())}`;
+  el.textContent = `Поточний час (UTC+2): ${formatted}`;
+}
+
+// Return ISO-like string with +02:00 timezone, e.g. 2025-11-25T12:27:14+02:00
+function getIsoUtcPlus2() {
+  const now = new Date();
+  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const tzDate = new Date(utcMs + 2 * 3600000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${tzDate.getFullYear()}-${pad(tzDate.getMonth()+1)}-${pad(tzDate.getDate())}T${pad(tzDate.getHours())}:${pad(tzDate.getMinutes())}:${pad(tzDate.getSeconds())}+02:00`;
+}
+
+// Format server ISO like '2025-11-25T12:27:14+02:00' to 'HH:MM:SS DD-MM-YYYY'
+function formatIsoToDisplay(iso) {
+  if (!iso) return '—';
+  try {
+    // naive parse
+    const datePart = iso.substring(0, 10); // YYYY-MM-DD
+    const timePart = iso.substring(11, 19); // HH:MM:SS
+    const y = datePart.substring(0,4);
+    const m = datePart.substring(5,7);
+    const d = datePart.substring(8,10);
+    return `${timePart} ${d}-${m}-${y}`;
+  } catch (e) {
+    return iso;
+  }
+}
+
 // WiFi item builder
 function createWifiItem(item = { ssid: '', password: '', enabled: true }) {
   const wrapper = document.createElement('div');
@@ -151,6 +189,12 @@ async function loadConfig() {
     document.getElementById('enableAutoLight').checked = !!cfg.enableAutoLight;
     document.getElementById('lightThreshold').value = cfg.lightThreshold || '';
     document.getElementById('uploadIntervalSeconds').value = cfg.uploadIntervalSeconds || '';
+    // auto-light schedule
+    if (cfg.autoLightStartTime) document.getElementById('autoLightStartTime').value = cfg.autoLightStartTime;
+    if (cfg.autoLightEndTime) document.getElementById('autoLightEndTime').value = cfg.autoLightEndTime;
+    // last saved time
+    const lastSavedEl = document.getElementById('lastSavedTime');
+    if (lastSavedEl) lastSavedEl.textContent = formatIsoToDisplay(cfg.lastSavedLocalTime || cfg.currentTime) || '—';
     document.getElementById('deviceName').value = cfg.deviceName || '';
 
     // wifi list
@@ -181,6 +225,29 @@ document.addEventListener('DOMContentLoaded', () => {
   ensureToastContainer();
   loadConfig();
 
+  // Start periodic update: update current-time display and send currentTime to server every second
+  updateCurrentTimeUTC2();
+  // send immediately and then set interval
+  (async function sendCurrentTimeOnce() {
+    try {
+      const iso = getIsoUtcPlus2();
+      await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentTime: iso }) });
+    } catch (e) {
+      console.error('Failed to send currentTime update', e);
+    }
+  })();
+  setInterval(() => {
+    updateCurrentTimeUTC2();
+    const iso = getIsoUtcPlus2();
+    // fire-and-forget POST to update currentTime on server (written to config)
+    fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentTime: iso }) }).catch(e => console.error('currentTime POST failed', e));
+  }, 1000);
+  // Update hidden input used by form (if present)
+  setInterval(() => {
+    const el = document.getElementById('currentTimeHidden');
+    if (el) el.value = getIsoUtcPlus2();
+  }, 1000);
+
   document.getElementById('addAddressBtn').addEventListener('click', () => {
     document.getElementById('sendAddressesList').appendChild(createServerItem(''));
   });
@@ -197,6 +264,11 @@ document.addEventListener('DOMContentLoaded', () => {
       payload.enableAutoLight = !!document.getElementById('enableAutoLight').checked;
       payload.lightThreshold = Number(document.getElementById('lightThreshold').value) || 0;
       payload.uploadIntervalSeconds = Number(document.getElementById('uploadIntervalSeconds').value) || 0;
+      // include start/end times if present
+      const start = document.getElementById('autoLightStartTime').value;
+      const end = document.getElementById('autoLightEndTime').value;
+      if (start) payload.autoLightStartTime = start;
+      if (end) payload.autoLightEndTime = end;
 
       try {
         const res = await fetch('/api/config', {
@@ -206,6 +278,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (!res.ok) throw new Error('Save failed: ' + res.status);
         const data = await res.json();
+        // update last-saved time shown in UI (server returns config)
+        if (data && data.config && data.config.lastSavedLocalTime) {
+          const lastSavedEl2 = document.getElementById('lastSavedTime');
+          if (lastSavedEl2) lastSavedEl2.textContent = data.config.lastSavedLocalTime;
+        }
         // clear unsaved markers for auto section
         document.querySelectorAll('#AutoControlSettings .unsaved').forEach(el => el.classList.remove('unsaved'));
       } catch (err) {

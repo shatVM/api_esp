@@ -5,21 +5,24 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <Adafruit_AHTX0.h>
-#include <BH1750.h> // Додано для BH1750
-#include <Wire.h>    // Додано для I2C
+#include <BH1750.h>
+#include <Wire.h>
+#include <EEPROM.h>
 
 // Для WPA2-Enterprise
-const char* WIFI_SSID = "FreeZSTU";      // <-- ВАШ SSID
-const char* WIFI_PASSWORD = "";      // <-- ВАШ ПАРОЛЬ (краще не хардкодити)
+const char* WIFI_SSID = "FreeZSTU";
+const char* WIFI_PASSWORD = "";
 
 // --- Налаштування серверів ---
 const char* PUBLIC_SERVER_HOST = "api-esp-tnww.onrender.com";
 const int PUBLIC_SERVER_PORT = 443;
 const char* LOCAL_SERVER_HOST = "192.168.1.115";
 const int LOCAL_SERVER_PORT = 80;
+const char* CONFIG_SERVER_HOST = "api-esp-tnww.onrender.com";
+const int CONFIG_SERVER_PORT = 443;
 
-const unsigned long UPLOAD_INTERVAL = 1000; // 1 секунда
-const unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000; // таймаут підключення Wi-Fi
+unsigned long UPLOAD_INTERVAL = 1000; // 1 секунда (буде оновлюватися з сервера)
+const unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000;
 
 // --- Піни для керування ---
 const int PIN_12 = 12; // D6 -> GPIO12
@@ -27,7 +30,7 @@ const int PIN_13 = 13; // D7 -> GPIO13
 const int PIN_14 = 14; // D5 -> GPIO14
 
 // --- Налаштування DHT сенсора ---
-#define DHTPIN 2     // Пін, до якого підключено DHT11 (D4 на NodeMCU)
+#define DHTPIN 2
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -37,11 +40,188 @@ BH1750 lightMeter;
 
 // --- Налаштування АЦП для вимірювання напруги ---
 const int ADC_PIN = A0;
-const float VOLTAGE_DIVIDER_RATIO = 5.0; 
+const float VOLTAGE_DIVIDER_RATIO = 5.0;
 
 // --- Глобальні об'єкти ---
 ESP8266WebServer espServer(80);
 unsigned long lastUploadTime = 0;
+unsigned long lastConfigFetchTime = 0;
+const unsigned long CONFIG_FETCH_INTERVAL = 300000; // Оновлювати конфіг кожні 5 хвилин
+
+// Конфігурація, завантажена з сервера
+struct Config {
+  bool enableAutoLight = false;
+  int lightThreshold = 40;
+  int uploadIntervalSeconds = 30;
+  String deviceName = "esp8266_12E";
+  String sendAddresses[10]; // Max 10 addresses
+  int sendAddressCount = 0;
+  String wifiSSIDs[5]; // Max 5 networks
+  String wifiPasswords[5];
+  bool wifiEnabled[5];
+  int wifiCount = 0;
+  // Auto-light schedule (HH:MM strings)
+  String autoLightStartTime = "07:00";
+  String autoLightEndTime = "22:00";
+  // Last-saved local time reported by server (ISO string)
+  String lastSavedLocalTime = "";
+  // Parsed base time components from lastSavedLocalTime
+  int baseHour = -1;
+  int baseMin = 0;
+  int baseSec = 0;
+  // millis() when config with base time was fetched
+  unsigned long configFetchedAtMillis = 0;
+} config;
+
+// Forward declarations for functions used before their definitions
+void fetchConfigFromServer();
+void updatePinStatesFromServer();
+void sendDataToServer();
+
+// Time helpers
+bool parseIsoTimeToHMS(const String &iso, int &h, int &m, int &s) {
+  // Expect format like YYYY-MM-DDTHH:MM:SS(+|-)TZ or YYYY-MM-DDTHH:MM:SS
+  if (iso.length() < 19) return false;
+  String hs = iso.substring(11, 13);
+  String ms = iso.substring(14, 16);
+  String ss = iso.substring(17, 19);
+  h = hs.toInt(); m = ms.toInt(); s = ss.toInt();
+  return true;
+}
+
+int timeStringToMinutes(const String &hhmm) {
+  if (hhmm.length() < 4) return -1;
+  int colon = hhmm.indexOf(':');
+  if (colon <= 0) return -1;
+  int h = hhmm.substring(0, colon).toInt();
+  int m = hhmm.substring(colon + 1).toInt();
+  return (h * 60 + m) % (24 * 60);
+}
+
+int getCurrentMinutesFromConfigBase() {
+  if (config.baseHour < 0) return -1;
+  unsigned long elapsedSec = (millis() - config.configFetchedAtMillis) / 1000;
+  long totalSec = (long)config.baseHour * 3600L + (long)config.baseMin * 60L + (long)config.baseSec + (long)elapsedSec;
+  int minutes = (totalSec / 60) % (24 * 60);
+  if (minutes < 0) minutes += 24 * 60;
+  return minutes;
+}
+
+bool isWithinAutoLightSchedule() {
+  int startM = timeStringToMinutes(config.autoLightStartTime);
+  int endM = timeStringToMinutes(config.autoLightEndTime);
+  int nowM = getCurrentMinutesFromConfigBase();
+  if (startM < 0 || endM < 0) return true; // no schedule -> always allowed
+  if (nowM < 0) return true; // no base time -> allow by default
+  if (startM <= endM) {
+    return (nowM >= startM && nowM < endM);
+  } else {
+    // Overnight window (e.g., 22:00 -> 06:00)
+    return (nowM >= startM || nowM < endM);
+  }
+}
+
+// Bluetooth removed: use Serial monitor or web UI for configuration
+
+// --- Функція завантаження конфігурації з сервера ---
+void fetchConfigFromServer() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Not connected to Wi-Fi, cannot fetch config");
+    return;
+  }
+
+  HTTPClient http;
+  WiFiClientSecure clientSecure;
+  clientSecure.setInsecure();
+  
+  String url = "https://" + String(CONFIG_SERVER_HOST) + "/api/config";
+  Serial.print("Fetching config from: ");
+  Serial.println(url);
+
+  if (!http.begin(clientSecure, url)) {
+    Serial.println("HTTP begin() failed");
+    return;
+  }
+
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.printf("Failed to fetch config, HTTP code: %d\n", httpCode);
+    http.end();
+    return;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  const size_t capacity = JSON_OBJECT_SIZE(20) + 1024;
+  DynamicJsonDocument doc(capacity);
+  DeserializationError error = deserializeJson(doc, payload);
+  
+  if (error) {
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(error.c_str());
+    return;
+  }
+
+  // Parse auto-light settings
+  if (doc.containsKey("enableAutoLight")) {
+    config.enableAutoLight = doc["enableAutoLight"].as<bool>();
+  }
+  if (doc.containsKey("lightThreshold")) {
+    config.lightThreshold = doc["lightThreshold"].as<int>();
+  }
+  if (doc.containsKey("uploadIntervalSeconds")) {
+    UPLOAD_INTERVAL = doc["uploadIntervalSeconds"].as<int>() * 1000;
+  }
+  if (doc.containsKey("deviceName")) {
+    config.deviceName = doc["deviceName"].as<String>();
+  }
+
+  // Parse auto-light schedule times
+  if (doc.containsKey("autoLightStartTime") && doc["autoLightStartTime"].is<const char*>()) {
+    config.autoLightStartTime = doc["autoLightStartTime"].as<String>();
+  }
+  if (doc.containsKey("autoLightEndTime") && doc["autoLightEndTime"].is<const char*>()) {
+    config.autoLightEndTime = doc["autoLightEndTime"].as<String>();
+  }
+
+  // Parse server-saved local time (ISO) and record base components
+  if (doc.containsKey("lastSavedLocalTime") && doc["lastSavedLocalTime"].is<const char*>()) {
+    config.lastSavedLocalTime = doc["lastSavedLocalTime"].as<String>();
+    int h, m, s;
+    if (parseIsoTimeToHMS(config.lastSavedLocalTime, h, m, s)) {
+      config.baseHour = h; config.baseMin = m; config.baseSec = s;
+      config.configFetchedAtMillis = millis();
+      Serial.printf("Parsed base local time from server: %02d:%02d:%02d\n", h, m, s);
+    } else {
+      config.baseHour = -1;
+    }
+  }
+
+  // Parse WiFi networks
+  if (doc.containsKey("wifi") && doc["wifi"].is<JsonArray>()) {
+    JsonArray wifiArray = doc["wifi"].as<JsonArray>();
+    config.wifiCount = min(5, (int)wifiArray.size());
+    for (int i = 0; i < config.wifiCount; i++) {
+      config.wifiSSIDs[i] = wifiArray[i]["ssid"].as<String>();
+      config.wifiPasswords[i] = wifiArray[i]["password"].as<String>();
+      config.wifiEnabled[i] = wifiArray[i]["enabled"].as<bool>();
+    }
+  }
+
+  // Parse send addresses
+  if (doc.containsKey("sendAddresses") && doc["sendAddresses"].is<JsonArray>()) {
+    JsonArray addrArray = doc["sendAddresses"].as<JsonArray>();
+    config.sendAddressCount = min(10, (int)addrArray.size());
+    for (int i = 0; i < config.sendAddressCount; i++) {
+      config.sendAddresses[i] = addrArray[i].as<String>();
+    }
+  }
+
+  Serial.println("Config fetched successfully!");
+  Serial.printf("Device: %s, Interval: %lu ms, AutoLight: %d\n", 
+    config.deviceName.c_str(), UPLOAD_INTERVAL, config.enableAutoLight);
+}
 
 // --- Вспоміжні ---
 void handleNotFound() {
@@ -99,6 +279,26 @@ void sendDataToServer() {
     return;
   }
 
+  // Refresh configuration from server before each upload
+  Serial.println("Refreshing config from server before upload...");
+  fetchConfigFromServer();
+
+  // Log current config to Serial for debugging
+  Serial.println(F("=== Current Config ==="));
+  Serial.printf("deviceName: %s\n", config.deviceName.c_str());
+  Serial.printf("uploadInterval_ms: %lu\n", UPLOAD_INTERVAL);
+  Serial.printf("enableAutoLight: %d\n", config.enableAutoLight ? 1 : 0);
+  Serial.printf("lightThreshold: %d\n", config.lightThreshold);
+  Serial.printf("sendAddressCount: %d\n", config.sendAddressCount);
+  for (int i = 0; i < config.sendAddressCount; i++) {
+    Serial.printf("  addr[%d]: %s\n", i, config.sendAddresses[i].c_str());
+  }
+  Serial.printf("wifiCount: %d\n", config.wifiCount);
+  for (int i = 0; i < config.wifiCount; i++) {
+    Serial.printf("  wifi[%d]: %s (%s)\n", i, config.wifiSSIDs[i].c_str(), config.wifiEnabled[i] ? "EN" : "DIS");
+  }
+  Serial.println(F("======================="));
+
   String publicIp = getPublicIP();
 
   // --- Підготовка JSON-даних ---
@@ -110,7 +310,7 @@ void sendDataToServer() {
   jsonDoc["public_ip"] = publicIp;
   jsonDoc["gateway_ip"] = WiFi.gatewayIP().toString();
   jsonDoc["rssi_dbm"] = WiFi.RSSI();
-  jsonDoc["deviceName"] = "esp8266_12E";
+  jsonDoc["deviceName"] = config.deviceName;
   
   // --- Дані з сенсорів ---
   // DHT11
@@ -132,6 +332,19 @@ void sendDataToServer() {
       jsonDoc["lux"] = lux;
   } else {
       Serial.println(F("Failed to read from BH1750 sensor!"));
+  }
+
+  // --- Device-side auto-light enforcement for PIN_12 based on schedule ---
+  if (config.enableAutoLight) {
+    bool within = isWithinAutoLightSchedule();
+    bool shouldTurnOn = (lux >= 0) ? (lux < config.lightThreshold) : false;
+    if (within && shouldTurnOn) {
+      digitalWrite(PIN_12, HIGH);
+      Serial.println("Auto-light: turning PIN_12 ON (within schedule and dark)");
+    } else {
+      digitalWrite(PIN_12, LOW);
+      Serial.println("Auto-light: turning PIN_12 OFF (outside schedule or bright)");
+    }
   }
 
   // --- Деталі про пристрій ---
@@ -177,21 +390,41 @@ void sendDataToServer() {
     return (httpCode >= 200 && httpCode < 300);
   };
 
-  // --- Спроба відправки ---
+  // --- Спроба відправки на налаштовані адреси ---
   bool success = false;
-  {
-    WiFiClientSecure clientSecure;
-    clientSecure.setInsecure();
-    success = performPost(clientSecure, PUBLIC_SERVER_HOST, PUBLIC_SERVER_PORT, "/upload", true);
-  }
-  if (!success) {
-    Serial.println("\nFailed to send to public server. Falling back to local server...");
-    WiFiClient client;
-    success = performPost(client, LOCAL_SERVER_HOST, LOCAL_SERVER_PORT, "/upload", false);
+  for (int i = 0; i < config.sendAddressCount; i++) {
+    String url = config.sendAddresses[i];
+    if (url.length() == 0) continue;
+    
+    Serial.printf("Trying send address %d: %s\n", i, url.c_str());
+    
+    // Parse URL to get host, port, and path
+    bool isHttps = url.startsWith("https");
+    int protoEnd = url.indexOf("://") + 3;
+    int hostEnd = url.indexOf('/', protoEnd);
+    if (hostEnd == -1) hostEnd = url.length();
+    
+    String hostPart = url.substring(protoEnd, hostEnd);
+    String path = hostEnd < url.length() ? url.substring(hostEnd) : "/upload";
+    
+    int portPos = hostPart.indexOf(':');
+    String host = portPos > 0 ? hostPart.substring(0, portPos) : hostPart;
+    int port = portPos > 0 ? hostPart.substring(portPos + 1).toInt() : (isHttps ? 443 : 80);
+    
+    if (isHttps) {
+      WiFiClientSecure clientSecure;
+      clientSecure.setInsecure();
+      success = performPost(clientSecure, host, port, path, true);
+    } else {
+      WiFiClient client;
+      success = performPost(client, host, port, path, false);
+    }
+    
+    if (success) break;
   }
 
   if (success) Serial.println("Data sent successfully.");
-  else Serial.println("Failed to send data to both servers.");
+  else Serial.println("Failed to send data to all configured servers.");
   Serial.println("-------------------- ");
 }
 
@@ -256,6 +489,20 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\nESP8266 Starting...");
 
+  // Bluetooth removed: configure via Serial monitor or web UI
+  
+  // Set default config
+  config.wifiCount = 2;
+  config.wifiSSIDs[0] = "FreeZSTU";
+  config.wifiPasswords[0] = "";
+  config.wifiEnabled[0] = true;
+  config.wifiSSIDs[1] = "POCOFree";
+  config.wifiPasswords[1] = "";
+  config.wifiEnabled[1] = false;
+  config.sendAddressCount = 1;
+  config.sendAddresses[0] = "https://api-esp-tnww.onrender.com";
+  config.deviceName = "esp8266_12E";
+
   // Ініціалізація I2C
   Wire.begin(4, 5); // SDA: GPIO4 (D2), SCL: GPIO5 (D1)
 
@@ -284,20 +531,39 @@ void setup() {
     Serial.println(F("BH1750 found"));
   }
 
-  // Підключення до Wi-Fi
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting to Wi-Fi");
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && (millis() - start) < WIFI_CONNECT_TIMEOUT_MS) {
-    delay(250);
-    Serial.print(".");
+  // Підключення до Wi-Fi (спроба першої включеної мережі)
+  bool connected = false;
+  for (int i = 0; i < config.wifiCount; i++) {
+    if (!config.wifiEnabled[i]) continue;
+    
+    Serial.print("Attempting to connect to: ");
+    Serial.println(config.wifiSSIDs[i]);
+    
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(config.wifiSSIDs[i].c_str(), config.wifiPasswords[i].c_str());
+    
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - start) < WIFI_CONNECT_TIMEOUT_MS) {
+      delay(250);
+      Serial.print(".");
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nConnected!");
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+      connected = true;
+      
+      // Fetch config from server
+      delay(1000);
+      fetchConfigFromServer();
+      updatePinStatesFromServer();
+      break;
+    }
   }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected!");
-    Serial.print("IP Address: "); Serial.println(WiFi.localIP());
-    updatePinStatesFromServer();
-  } else {
-    Serial.println("\nWi-Fi connect timed out.");
+  
+  if (!connected) {
+    Serial.println("\nWi-Fi connect timed out. Use Serial monitor or web UI to configure settings.");
   }
 
   // Маршрути сервера
@@ -311,9 +577,19 @@ void setup() {
 void loop() {
   espServer.handleClient();
 
+  // Bluetooth removed — no Bluetooth command handling
+
+  // Periodic data upload
   if (millis() - lastUploadTime >= UPLOAD_INTERVAL) {
     lastUploadTime = millis();
     sendDataToServer();
-    updatePinStatesFromServer(); // Оновлюємо стан пінів після відправки даних
+    updatePinStatesFromServer();
+  }
+
+  // Periodic config fetch from server (every 5 minutes)
+  if (WiFi.isConnected() && millis() - lastConfigFetchTime >= CONFIG_FETCH_INTERVAL) {
+    lastConfigFetchTime = millis();
+    Serial.println("Periodic config fetch...");
+    fetchConfigFromServer();
   }
 }

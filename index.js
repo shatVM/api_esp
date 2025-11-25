@@ -67,6 +67,11 @@ let config = {
   enableAutoLight: false,
   lightThreshold: 40,
   uploadIntervalSeconds: 30,
+  // Auto-light schedule
+  autoLightStartTime: "07:00",
+  autoLightEndTime: "22:00",
+  // Last time settings were saved in UTC+2 (string)
+  lastSavedLocalTime: null,
   // New fields
   // wifi is an ordered array of networks { ssid, password, enabled }
   wifi: [],
@@ -122,6 +127,13 @@ app.post('/api/config', (req, res) => {
     if (typeof newConfig.uploadIntervalSeconds === 'number') {
       config.uploadIntervalSeconds = newConfig.uploadIntervalSeconds;
     }
+    // Auto-light schedule times (HH:MM strings)
+    if (typeof newConfig.autoLightStartTime === 'string') {
+      config.autoLightStartTime = newConfig.autoLightStartTime;
+    }
+    if (typeof newConfig.autoLightEndTime === 'string') {
+      config.autoLightEndTime = newConfig.autoLightEndTime;
+    }
     // Wifi list (array of { ssid, password, enabled })
     if (Array.isArray(newConfig.wifi)) {
       config.wifi = newConfig.wifi.map(w => ({
@@ -146,7 +158,30 @@ app.post('/api/config', (req, res) => {
     if (typeof newConfig.deviceName === 'string') {
       config.deviceName = newConfig.deviceName;
     }
+    // currentTime updates (from UI) - expected ISO string in UTC+2
+    if (typeof newConfig.currentTime === 'string') {
+      config.currentTime = newConfig.currentTime;
+      // also mirror into lastSavedLocalTime for backward compatibility / ESP base time
+      config.lastSavedLocalTime = newConfig.currentTime;
+      console.log(`[Time Update] currentTime received from UI: ${config.currentTime}`);
+    }
     
+    // Save server-side timestamp in UTC+2 to help devices/local display
+    try {
+      const now = new Date();
+      const offsetHours = 2; // UTC+2 requested
+      const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const tzDate = new Date(utcMs + offsetHours * 3600000);
+      const pad = (n) => String(n).padStart(2, '0');
+      const formatted = `${tzDate.getFullYear()}-${pad(tzDate.getMonth()+1)}-${pad(tzDate.getDate())}T${pad(tzDate.getHours())}:${pad(tzDate.getMinutes())}:${pad(tzDate.getSeconds())}+02:00`;
+      config.lastSavedLocalTime = formatted;
+      // keep a separate currentTime field if not present
+      if (!config.currentTime) config.currentTime = formatted;
+    } catch (e) {
+      console.warn('Failed to compute local save time:', e);
+      config.lastSavedLocalTime = new Date().toISOString();
+    }
+
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
     console.log('Configuration updated:', config);
     res.json({ status: 'ok', config });

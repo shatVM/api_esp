@@ -18,10 +18,23 @@
             <aside class="sidebar">
                 <div id="AutoControlSettings" class="content-div">
                     <h2>Автоматичне керування</h2>
+                    <h3 id="currentTime" style="margin-top:0.25rem; color:#374151; font-weight:600;">Поточний час: —</h3>
+                    <input type="hidden" id="currentTimeHidden" name="currentTime" />
                     <form id="configForm">
                         <div class="form-switch sensor-item">
                             <input type="checkbox" id="enableAutoLight" name="enableAutoLight">
                             <label for="enableAutoLight">Увімкнути авто-освітлення (пін 12)</label>
+                        </div>
+                        <div class="form-group sensor-item">
+                            <label for="autoLightStartTime">Час початку (HH:MM)</label>
+                            <input type="time" id="autoLightStartTime" name="autoLightStartTime" class="form-control">
+                        </div>
+                        <div class="form-group sensor-item">
+                            <label for="autoLightEndTime">Час закінчення (HH:MM)</label>
+                            <input type="time" id="autoLightEndTime" name="autoLightEndTime" class="form-control">
+                        </div>
+                        <div class="form-note" style="margin-top:8px; color:#6b7280; font-size:0.9rem;">
+                            Останнє збереження налаштувань (UTC+2): <span id="lastSavedTime">—</span>
                         </div>
                         <div class="form-group sensor-item">
                             <label for="lightThreshold">Поріг освітлення (lux)</label>

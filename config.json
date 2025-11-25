@@ -2,6 +2,9 @@
   "enableAutoLight": false,
   "lightThreshold": 40,
   "uploadIntervalSeconds": 30,
+  "autoLightStartTime": "12:47",
+  "autoLightEndTime": "12:48",
+  "lastSavedLocalTime": "2025-11-25T12:46:38+02:00",
   "wifi": [
     {
       "ssid": "POCOFree",
@@ -23,5 +26,6 @@
     "https://api-esp-tnww.onrender.com",
     "http://localhost/control"
   ],
-  "deviceName": "3003"
+  "deviceName": "3003",
+  "currentTime": "2025-11-25T12:46:38+02:00"
 }
