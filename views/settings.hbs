@@ -5,44 +5,66 @@
     <title>Налаштування - ESP Receiver</title>
     <link rel="stylesheet" href="/styles.css" />
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet" />
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     {{> nav}}
 
     <div class="container">
-        <h2>Налаштування</h2>
-        <p>Тут ви можете керувати налаштуваннями пристрою та системи.</p>
+       
 
         <div class="three-col" style="grid-template-columns: 1fr; max-width: 600px; margin: auto;">
             <aside class="sidebar">
-                <div id="AutoControlSettings">
+                <div id="AutoControlSettings" class="content-div">
                     <h2>Автоматичне керування</h2>
                     <form id="configForm">
-                        <div class="form-switch">
+                        <div class="form-switch sensor-item">
                             <input type="checkbox" id="enableAutoLight" name="enableAutoLight">
                             <label for="enableAutoLight">Увімкнути авто-освітлення (пін 12)</label>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group sensor-item">
                             <label for="lightThreshold">Поріг освітлення (lux)</label>
                             <input type="number" id="lightThreshold" name="lightThreshold" class="form-control">
                         </div>
-                        <div class="form-group">
+                        <div class="form-group sensor-item">
                             <label for="uploadIntervalSeconds">Інтервал оновлення (сек)</label>
                             <input type="number" id="uploadIntervalSeconds" name="uploadIntervalSeconds" class="form-control">
                         </div>
-                        <button type="submit" class="btn">Зберегти</button>
+                        <div style="margin-top:12px; display:flex; gap:8px;">
+                            <button type="submit" class="btn success"><i data-lucide="save" style="margin-right:6px"></i>Зберегти</button>
+                            <button type="reset" class="btn warning"><i data-lucide="refresh-ccw" style="margin-right:6px"></i>Скинути</button>
+                        </div>
                     </form>
                 </div>
 
-                <div class="card" style="margin-top: 2rem;">
+                <div class="content-div card" style="margin-top: 2rem;">
                     <div class="card-body">
-                        <h5 class="card-title">Загальні налаштування</h5>
-                        <form>
-                            <div class="form-group">
+                        <h2 class="card-title">Загальні налаштування</h2>
+                        <form id="generalForm">
+                            <div class="form-group sensor-item">
                                 <label for="deviceName">Назва пристрою</label>
                                 <input type="text" class="form-control" id="deviceName" placeholder="ESP8266 Controller">
                             </div>
-                            <button type="submit" class="btn btn-primary mt-3">Зберегти</button>
+
+                            <h3 style="margin-top:1rem">WiFi (список мереж)</h3>
+                            <div id="wifiList" style="margin-bottom:8px"></div>
+                            <div style="display:flex; gap:8px; margin-bottom:8px;">
+                                <button id="addWifiBtn" type="button" class="btn info"><i data-lucide="plus-circle" style="margin-right:6px"></i>Додати мережу</button>
+                                <small style="align-self:center; color:#6b7280">Виберіть потрібні мережі та впорядкуйте</small>
+                            </div>
+
+                            <h3 style="margin-top:1rem">Адреси для надсилання (сервери)</h3>
+                            <div id="sendAddressesList" style="margin-bottom:8px"></div>
+                            <div style="display:flex; gap:8px; margin-bottom:8px;">
+                                <button id="addAddressBtn" type="button" class="btn info"><i data-lucide="plus-circle" style="margin-right:6px"></i>Додати сервер/адресу</button>
+                                <small style="align-self:center; color:#6b7280">Вкажіть URL або електронну адресу</small>
+                            </div>
+
+                            <div style="margin-top:12px; display:flex; gap:8px;">
+                                <button type="submit" class="btn success"><i data-lucide="save" style="margin-right:6px"></i>Зберегти</button>
+                                <button type="reset" class="btn warning"><i data-lucide="refresh-ccw" style="margin-right:6px"></i>Скинути</button>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -51,5 +73,6 @@
     </div>
 
     <script src="/js/pin-control.js"></script>
+    <script src="/js/settings.js"></script>
 </body>
 </html>

@@ -67,7 +67,7 @@
           >
 
             <h2>Received Uploads</h2>
-            <button id="deleteAllBtn" class="del">Видалити все</button>
+            <button id="deleteAllBtn" class="del"><i data-lucide="trash-2" style="margin-right:6px"></i>Видалити все</button>
           </div>
           <ul id="uploadList" class="upload-list">
             {{#if list}}
@@ -85,7 +85,7 @@
                         data-id="{{id}}"
                         class="del"
                         onclick="event.stopPropagation()"
-                      >💥 Delete</button>
+                      ><i data-lucide="trash-2"></i></button>
                     </div>
                   </div>
                   <div class="device-tooltip" aria-hidden="false">
@@ -133,10 +133,10 @@
           </ul>
           <div class="pagination">
             <div class="pagination-controls">
-              <button id="prevPage" class="pagination-btn">← Previous</button>
+              <button id="prevPage" class="pagination-btn"><i data-lucide="chevron-left" style="margin-right:6px"></i>Previous</button>
               <span class="page-info">Page
                 <span id="currentPage">1</span></span>
-              <button id="nextPage" class="pagination-btn">Next →</button>
+              <button id="nextPage" class="pagination-btn">Next <i data-lucide="chevron-right" style="margin-left:6px"></i></button>
             </div>
             <div class="items-per-page">
               <label for="itemsPerPageSelect">Items per page:</label>

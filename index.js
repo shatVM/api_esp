@@ -66,15 +66,37 @@ const CONFIG_FILE = path.join(__dirname, 'config.json');
 let config = {
   enableAutoLight: false,
   lightThreshold: 40,
-  uploadIntervalSeconds: 30
+  uploadIntervalSeconds: 30,
+  // New fields
+  // wifi is an ordered array of networks { ssid, password, enabled }
+  wifi: [],
+  sendAddresses: [],
+  deviceName: ""
 };
 
 // Завантажуємо конфігурацію при старті
 try {
   if (fs.existsSync(CONFIG_FILE)) {
     const rawConfig = fs.readFileSync(CONFIG_FILE, 'utf8');
-    config = JSON.parse(rawConfig);
-    console.log('Configuration loaded:', config);
+    try {
+      const parsed = JSON.parse(rawConfig);
+      // Ensure new fields exist when loading older configs
+      config = Object.assign({}, config, parsed);
+      // wifi backward compatibility: accept object or array
+      if (Array.isArray(parsed.wifi)) {
+        config.wifi = parsed.wifi.map(w => ({ ssid: w.ssid || '', password: w.password || '', enabled: !!w.enabled }));
+      } else if (parsed.wifi && typeof parsed.wifi === 'object') {
+        // single network stored as object in older configs
+        config.wifi = [{ ssid: parsed.wifi.ssid || '', password: parsed.wifi.password || '', enabled: true }];
+      } else {
+        config.wifi = config.wifi || [];
+      }
+      config.sendAddresses = Array.isArray(parsed.sendAddresses) ? parsed.sendAddresses : (config.sendAddresses || []);
+      config.deviceName = typeof parsed.deviceName === 'string' ? parsed.deviceName : (config.deviceName || '');
+      console.log('Configuration loaded:', config);
+    } catch (e) {
+      console.error('Failed to parse config, using defaults:', e);
+    }
   } else {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
     console.log('Default configuration created.');
@@ -99,6 +121,30 @@ app.post('/api/config', (req, res) => {
     }
     if (typeof newConfig.uploadIntervalSeconds === 'number') {
       config.uploadIntervalSeconds = newConfig.uploadIntervalSeconds;
+    }
+    // Wifi list (array of { ssid, password, enabled })
+    if (Array.isArray(newConfig.wifi)) {
+      config.wifi = newConfig.wifi.map(w => ({
+        ssid: typeof w.ssid === 'string' ? w.ssid : '',
+        password: typeof w.password === 'string' ? w.password : '',
+        enabled: !!w.enabled
+      }));
+    } else if (newConfig.wifi && typeof newConfig.wifi === 'object') {
+      // accept single object for backward compatibility
+      config.wifi = [{
+        ssid: typeof newConfig.wifi.ssid === 'string' ? newConfig.wifi.ssid : '',
+        password: typeof newConfig.wifi.password === 'string' ? newConfig.wifi.password : '',
+        enabled: true
+      }];
+    }
+    // Addresses to send data to (array of strings)
+    if (Array.isArray(newConfig.sendAddresses)) {
+      // sanitize: keep only strings
+      config.sendAddresses = newConfig.sendAddresses.filter(a => typeof a === 'string');
+    }
+    // Device name used by ESP as Device Information Name
+    if (typeof newConfig.deviceName === 'string') {
+      config.deviceName = newConfig.deviceName;
     }
     
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');

@@ -1,5 +1,27 @@
 {
-  "enableAutoLight": true,
+  "enableAutoLight": false,
   "lightThreshold": 40,
-  "uploadIntervalSeconds": 10
+  "uploadIntervalSeconds": 30,
+  "wifi": [
+    {
+      "ssid": "POCOFree",
+      "password": "",
+      "enabled": true
+    },
+    {
+      "ssid": "FreeZSTU",
+      "password": "",
+      "enabled": false
+    },
+    {
+      "ssid": "ztu.edu.ua",
+      "password": "123456",
+      "enabled": false
+    }
+  ],
+  "sendAddresses": [
+    "https://api-esp-tnww.onrender.com",
+    "http://localhost/control"
+  ],
+  "deviceName": "3003"
 }

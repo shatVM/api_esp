@@ -1,5 +1,6 @@
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
   margin: 0;
   background-color: #f0f2f5;
   color: #1c1e21;
@@ -18,6 +19,67 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  position: relative;
+}
+
+.burger-menu {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #0284c7;
+  font-size: 24px;
+  padding: 0;
+  margin-left: auto;
+}
+
+.burger-menu i {
+  display: flex;
+  align-items: center;
+}
+
+.nav-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1100px) {
+  .burger-menu {
+    display: flex;
+    align-items: center;
+  }
+  
+  .nav-links {
+    position: absolute;
+    top: 60px;
+    right: 0;
+    left: 0;
+    background-color: #fff;
+    flex-direction: column;
+    gap: 0;
+    padding: 10px;
+    border-bottom: 1px solid #dddfe2;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out;
+    z-index: 1000;
+  }
+  
+  .nav-links.active {
+    max-height: 300px;
+  }
+  
+  .nav-links .header-link {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: 4px;
+    margin: 5px 0;
+  }
 }
 
 .header-link {
@@ -31,7 +93,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .header-link:hover {
@@ -74,8 +137,9 @@ body {
   font-weight: bold;
 }
 /* small card shadow for tooltip/details */
-.device-details, .device-tooltip {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+.device-details,
+.device-tooltip {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 /* floating tooltip that appears on hover */
@@ -100,13 +164,13 @@ body {
   border-radius: 6px;
   transition: all 0.2s ease;
   background: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .device-item:hover {
   background-color: #f8f9fa;
   border-color: #adb5bd;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: visible;
   z-index: 50;
 }
@@ -114,7 +178,6 @@ body {
 .device-item .device-tooltip[aria-hidden="false"] {
   display: block;
 }
-
 
 empty .list-row {
   opacity: 0.4;
@@ -179,7 +242,6 @@ empty .list-row {
 .sensor.empty {
   background: #f5f5f5;
   color: #999;
-  
 }
 
 .no-data {
@@ -210,7 +272,7 @@ empty .list-row {
 .sidebar {
   background: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   padding: 12px;
   max-width: 400px;
 }
@@ -327,7 +389,7 @@ empty .list-row {
 
 /* Стилі для порожніх елементів */
 .device-item.empty {
-  opacity: 0.7; 
+  opacity: 0.7;
   /* background: #f8fafc;   */
 }
 
@@ -344,7 +406,7 @@ empty .list-row {
   background: #ffffff;
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .list-row {
@@ -387,7 +449,7 @@ empty .list-row {
   color: #d4d4d4;
   padding: 20px;
   border-radius: 8px;
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
   min-height: 200px;
   overflow: auto; /* щоб вміст прокручувався, якщо великий */
 }
@@ -447,9 +509,10 @@ empty .list-row {
 
 /* рядки та границі */
 #detailView tr {
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
-#detailView td, #detailView th {
+#detailView td,
+#detailView th {
   padding: 8px 6px;
 }
 
@@ -460,9 +523,10 @@ empty .list-row {
 }
 
 /* підсвітка коду/рядків всередині таблиці */
-#detailView code, #detailView kbd {
+#detailView code,
+#detailView kbd {
   font-family: "Fira Code", "Courier New", monospace;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
@@ -471,7 +535,7 @@ empty .list-row {
 
 /* мобільне: підлаштування таблиці в стовпець */
 @media (max-width: 640px) {
-  #detailView td:first-child, 
+  #detailView td:first-child,
   #detailView th:first-child,
   #detailView td:last-child,
   #detailView th:last-child {
@@ -479,7 +543,10 @@ empty .list-row {
     width: 100%;
     padding: 6px 0;
   }
-  #detailView tr { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  #detailView tr {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
 }
 
 /* помилки */
@@ -493,7 +560,6 @@ empty .list-row {
   color: #4fc3ff;
   text-decoration: underline;
 }
-
 
 @media (max-width: 768px) {
   .two-col {
@@ -515,7 +581,7 @@ empty .list-row {
   padding: 15px;
   background: #f9f9f9;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   /* display: none; */
 }
 
@@ -550,8 +616,8 @@ empty .list-row {
   right: 0;
   bottom: 0;
   background-color: #ccc;
-  -webkit-transition: .4s;
-  transition: .4s;
+  -webkit-transition: 0.4s;
+  transition: 0.4s;
   border-radius: 34px;
 }
 
@@ -563,17 +629,17 @@ empty .list-row {
   left: 4px;
   bottom: 4px;
   background-color: white;
-  -webkit-transition: .4s;
-  transition: .4s;
+  -webkit-transition: 0.4s;
+  transition: 0.4s;
   border-radius: 50%;
 }
 
 input:checked + .slider {
-  background-color: #2196F3;
+  background-color: #2196f3;
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #2196F3;
+  box-shadow: 0 0 1px #2196f3;
 }
 
 input:checked + .slider:before {
@@ -589,6 +655,94 @@ input:checked + .slider:before {
 
 .slider.round:before {
   border-radius: 50%;
+}
+
+/* Flexbox utilities */
+.flex-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Button */
+.btn {
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: background-color 0.2s ease;
+}
+
+.btn.btn-small {
+  padding: 3px 9px;
+  font-size: 10px;
+}
+
+.btn.info {
+  background-color: #1877f2;
+}
+.btn.success {
+  background-color: #28a745;
+}
+.btn.warning {
+  background-color: #c29203;
+}
+.btn.danger {
+  background-color: #dc3545;
+}
+.btn.unactive {
+  background-color: #6c757d;
+}
+
+.btn:hover {
+  /* Darken whatever the current button background is (works for .btn.info, .btn.success, etc.) */
+  filter: brightness(0.9);
+}
+
+/* Unsaved field highlight */
+.unsaved input, .unsaved .form-control, .unsaved-list > .wifi-item > .form-control, .invalid {
+  outline: 2px solid #ff9800; /* orange */
+}
+.invalid {
+  outline: 2px solid #ff3b30; /* red for invalid */
+}
+
+/* Toast styles */
+#toastContainer .toast {
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  transition: opacity 0.3s ease;
+}
+#toastContainer .toast.success { background: #16a34a; }
+#toastContainer .toast.error { background: #dc2626; }
+#toastContainer .toast.info { background: #0ea5e9; }
+
+/* Toast container placement (moved from JS) */
+#toastContainer {
+  position: fixed;
+  right: 16px;
+  top: 16px;
+  z-index: 9999;
+}
+
+.wifi-enabled {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
 }
 
 /* Pin State Display */
@@ -608,7 +762,7 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
   min-width: 100px;
   min-height: 100px;
   display: flex;
@@ -651,7 +805,7 @@ input:checked + .slider:before {
 .chart-section {
   background: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   padding: 20px;
   margin-top: 20px;
 }
@@ -668,14 +822,16 @@ input:checked + .slider:before {
   height: 300px;
 }
 
-/* Styles for Sensor Info Block on Control Page */
-#SensorInfo {
+.content-div {
   margin-bottom: 20px;
   padding: 15px;
   background: #f9f9f9;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
+
+/* Styles for Sensor Info Block on Control Page */
+
 
 #SensorInfo h2 {
   color: #333;
@@ -698,9 +854,56 @@ input:checked + .slider:before {
   justify-content: space-between;
   align-items: center;
   background: #fff;
-  padding: 10px 15px;
+  padding: 7px 15px;
   border-radius: 6px;
   border: 1px solid #eee;
+}
+
+/* WiFi / Server list item layout */
+.wifi-item,
+.server-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.wifi-item .wifi-ssid,
+.wifi-item .wifi-pass,
+.server-item .address-input {
+  flex: 1 1 auto;
+  padding: 4px 5px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.wifi-item .wifi-enabled,
+.server-item .server-enabled {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+.controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.controls .btn {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+/* When checkbox disabled (unchecked), mark buttons as unactive */
+.sensor-item .btn.unactive,
+.sensor-item.unactive .btn {
+  background-color: #6c757d;
+  opacity: 0.6;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+/* also visually indicate disabled inputs when parent has .unactive */
+.sensor-item.unactive input[type="text"],
+.sensor-item.unactive input[type="password"] {
+  opacity: 0.7;
 }
 
 .sensor-label {
@@ -720,16 +923,15 @@ input:checked + .slider:before {
   cursor: pointer;
 }
 
-
 /* Нова візуалізація для батареї */
 #battery-item {
   position: relative;
   background: linear-gradient(
-    to right, 
-    #dcfce7, /* Світло-зелений */
-    #dcfce7 var(--battery-level-pct, 0%), 
-    #ffffff var(--battery-level-pct, 0%), /* Білий */
-    #ffffff
+    to right,
+    #dcfce7,
+    /* Світло-зелений */ #dcfce7 var(--battery-level-pct, 0%),
+    #ffffff var(--battery-level-pct, 0%),
+    /* Білий */ #ffffff
   );
   transition: background 0.5s ease-in-out;
 }
@@ -750,8 +952,8 @@ input:checked + .slider:before {
   border-radius: 5px;
   outline: none;
   opacity: 0.7;
-  -webkit-transition: .2s;
-  transition: opacity .2s;
+  -webkit-transition: 0.2s;
+  transition: opacity 0.2s;
 }
 
 .chart-controls .slider:hover {

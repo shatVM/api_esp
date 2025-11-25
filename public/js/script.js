@@ -126,10 +126,13 @@ function createListItem(it) {
                 </div>
             </div>
             <div class="actions">
-                <button data-id="${escapeHtml(it.id ?? '')}" class="del">🗑️ Delete</button>
+                <button data-id="${escapeHtml(it.id ?? '')}" class="del"><i data-lucide="trash-2"></i></button>
             </div>
         </div>
     `;
+
+    // render icons inside the new list item
+    if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 
     // Клік по елементу — показати деталі в detailView
     li.addEventListener('click', () => {
@@ -205,10 +208,12 @@ function createEmptyListItem() {
                 </div>
             </div>
             <div class="actions">
-                <button class="del" disabled style="opacity: 0.3">🗑️ Delete</button>
+                <button class="del" disabled style="opacity: 0.3"><i data-lucide="trash-2"></i></button>
             </div>
         </div>
     `;
+
+    if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
     return li;
 }
 
