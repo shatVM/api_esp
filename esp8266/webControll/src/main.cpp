@@ -1,4 +1,4 @@
-#include <ESP8266WiFi.h>
+#include <WiFiManager.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
 #include <WiFiClientSecure.h>
@@ -57,10 +57,6 @@ struct Config {
   String deviceName = "esp8266_12E";
   String sendAddresses[10]; // Max 10 addresses
   int sendAddressCount = 0;
-  String wifiSSIDs[5]; // Max 5 networks
-  String wifiPasswords[5];
-  bool wifiEnabled[5];
-  int wifiCount = 0;
 } config;
 
 // Forward declarations for functions used before their definitions
@@ -132,17 +128,6 @@ void fetchConfigFromServer() {
     config.enableLightThreshold = doc["enableLightThreshold"].as<bool>();
   }
 
-  // Parse WiFi networks
-  if (doc.containsKey("wifi") && doc["wifi"].is<JsonArray>()) {
-    JsonArray wifiArray = doc["wifi"].as<JsonArray>();
-    config.wifiCount = min(5, (int)wifiArray.size());
-    for (int i = 0; i < config.wifiCount; i++) {
-      config.wifiSSIDs[i] = wifiArray[i]["ssid"].as<String>();
-      config.wifiPasswords[i] = wifiArray[i]["password"].as<String>();
-      config.wifiEnabled[i] = wifiArray[i]["enabled"].as<bool>();
-    }
-  }
-
   // Parse send addresses
   if (doc.containsKey("sendAddresses") && doc["sendAddresses"].is<JsonArray>()) {
     JsonArray addrArray = doc["sendAddresses"].as<JsonArray>();
@@ -185,27 +170,6 @@ void handleControl() {
   espServer.send(400, "text/plain", "Bad Request: 'pin' and 'state' parameters are required and must be valid.");
 }
 
-// --- Функція отримання публічної IP-адреси ---
-String getPublicIP() {
-  HTTPClient http;
-  WiFiClient client;
-  String publicIp = "";
-  if (http.begin(client, "http://api.ipify.org")) {
-    int httpCode = http.GET();
-    if (httpCode == HTTP_CODE_OK) {
-      publicIp = http.getString();
-      publicIp.trim();
-      Serial.printf("Public IP address found: %s\n", publicIp.c_str());
-    } else {
-      Serial.printf("Failed to get public IP, HTTP code: %d, error: %s\n", httpCode, http.errorToString(httpCode).c_str());
-    }
-    http.end();
-  } else {
-    Serial.println("Failed to begin HTTP client for public IP check.");
-  }
-  return publicIp;
-}
-
 // --- Функція відправки даних на сервер ---
 void sendDataToServer() {
   if (WiFi.status() != WL_CONNECTED) {
@@ -227,13 +191,7 @@ void sendDataToServer() {
   for (int i = 0; i < config.sendAddressCount; i++) {
     Serial.printf("  addr[%d]: %s\n", i, config.sendAddresses[i].c_str());
   }
-  Serial.printf("wifiCount: %d\n", config.wifiCount);
-  for (int i = 0; i < config.wifiCount; i++) {
-    Serial.printf("  wifi[%d]: %s (%s)\n", i, config.wifiSSIDs[i].c_str(), config.wifiEnabled[i] ? "EN" : "DIS");
-  }
   Serial.println(F("======================="));
-
-  String publicIp = getPublicIP();
 
   // --- Підготовка JSON-даних ---
   const size_t capacity = 1024;
@@ -241,7 +199,6 @@ void sendDataToServer() {
 
   jsonDoc["ip"] = WiFi.localIP().toString();
   jsonDoc["uptime_ms"] = millis();
-  jsonDoc["public_ip"] = publicIp;
   jsonDoc["gateway_ip"] = WiFi.gatewayIP().toString();
   jsonDoc["rssi_dbm"] = WiFi.RSSI();
   jsonDoc["deviceName"] = config.deviceName;
@@ -317,35 +274,44 @@ void sendDataToServer() {
 
   // --- Спроба відправки на налаштовані адреси ---
   bool success = false;
-  for (int i = 0; i < config.sendAddressCount; i++) {
-    String url = config.sendAddresses[i];
-    if (url.length() == 0) continue;
-    
-    Serial.printf("Trying send address %d: %s\n", i, url.c_str());
-    
-    // Parse URL to get host, port, and path
-    bool isHttps = url.startsWith("https");
-    int protoEnd = url.indexOf("://") + 3;
-    int hostEnd = url.indexOf('/', protoEnd);
-    if (hostEnd == -1) hostEnd = url.length();
-    
-    String hostPart = url.substring(protoEnd, hostEnd);
-    String path = hostEnd < url.length() ? url.substring(hostEnd) : "/upload";
-    
-    int portPos = hostPart.indexOf(':');
-    String host = portPos > 0 ? hostPart.substring(0, portPos) : hostPart;
-    int port = portPos > 0 ? hostPart.substring(portPos + 1).toInt() : (isHttps ? 443 : 80);
-    
-    if (isHttps) {
-      WiFiClientSecure clientSecure;
-      clientSecure.setInsecure();
-      success = performPost(clientSecure, host, port, path, true);
-    } else {
-      WiFiClient client;
-      success = performPost(client, host, port, path, false);
+  if (config.sendAddressCount == 0) {
+    // Fallback: If no send addresses are configured, send to the default public host.
+    Serial.println("No send addresses configured, falling back to PUBLIC_SERVER_HOST.");
+    WiFiClientSecure clientSecure;
+    clientSecure.setInsecure();
+    success = performPost(clientSecure, PUBLIC_SERVER_HOST, PUBLIC_SERVER_PORT, "/upload", true);
+  } else {
+    // Send to all configured addresses until one succeeds.
+    for (int i = 0; i < config.sendAddressCount; i++) {
+      String url = config.sendAddresses[i];
+      if (url.length() == 0) continue;
+      
+      Serial.printf("Trying send address %d: %s\n", i, url.c_str());
+      
+      // Parse URL to get host, port, and path
+      bool isHttps = url.startsWith("https");
+      int protoEnd = url.indexOf("://") + 3;
+      int hostEnd = url.indexOf('/', protoEnd);
+      if (hostEnd == -1) hostEnd = url.length();
+      
+      String hostPart = url.substring(protoEnd, hostEnd);
+      String path = hostEnd < url.length() ? url.substring(hostEnd) : "/upload";
+      
+      int portPos = hostPart.indexOf(':');
+      String host = portPos > 0 ? hostPart.substring(0, portPos) : hostPart;
+      int port = portPos > 0 ? hostPart.substring(portPos + 1).toInt() : (isHttps ? 443 : 80);
+      
+      if (isHttps) {
+        WiFiClientSecure clientSecure;
+        clientSecure.setInsecure();
+        success = performPost(clientSecure, host, port, path, true);
+      } else {
+        WiFiClient client;
+        success = performPost(client, host, port, path, false);
+      }
+      
+      if (success) break;
     }
-    
-    if (success) break;
   }
 
   if (success) Serial.println("Data sent successfully.");
@@ -416,18 +382,6 @@ void setup() {
 
   // Bluetooth removed: configure via Serial monitor or web UI
   
-  // Set default config
-  config.wifiCount = 2;
-  config.wifiSSIDs[0] = "FreeZSTU";
-  config.wifiPasswords[0] = "";
-  config.wifiEnabled[0] = true;
-  config.wifiSSIDs[1] = "POCOFree";
-  config.wifiPasswords[1] = "";
-  config.wifiEnabled[1] = false;
-  config.sendAddressCount = 1;
-  config.sendAddresses[0] = "https://api-esp-tnww.onrender.com";
-  config.deviceName = "esp8266_12E";
-
   // Ініціалізація I2C
   Wire.begin(4, 5); // SDA: GPIO4 (D2), SCL: GPIO5 (D1)
 
@@ -456,40 +410,36 @@ void setup() {
     Serial.println(F("BH1750 found"));
   }
 
-  // Підключення до Wi-Fi (спроба першої включеної мережі)
-  bool connected = false;
-  for (int i = 0; i < config.wifiCount; i++) {
-    if (!config.wifiEnabled[i]) continue;
-    
-    Serial.print("Attempting to connect to: ");
-    Serial.println(config.wifiSSIDs[i]);
-    
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(config.wifiSSIDs[i].c_str(), config.wifiPasswords[i].c_str());
-    
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - start) < WIFI_CONNECT_TIMEOUT_MS) {
-      delay(250);
-      Serial.print(".");
-    }
-    
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("\nConnected!");
-      Serial.print("IP Address: ");
-      Serial.println(WiFi.localIP());
-      connected = true;
-      
-      // Fetch config from server
-      delay(1000);
-      fetchConfigFromServer();
-      updatePinStatesFromServer();
-      break;
-    }
+  // --- WiFiManager Setup ---
+  // WiFiManager will connect to a known network or start a configuration portal.
+  WiFiManager wifiManager;
+
+  // Uncomment for testing to reset saved credentials:
+  // wifiManager.resetSettings();
+
+  // Set a timeout for the portal. If no one configures it, the device will reboot.
+  wifiManager.setConfigPortalTimeout(180); // 3 minutes
+
+  Serial.println("Starting WiFiManager...");
+  // Use the device name for the portal AP name, or a default.
+  String apName = "ESP-Config-" + String(ESP.getChipId(), HEX);
+
+  if (!wifiManager.autoConnect(apName.c_str())) {
+    Serial.println("Failed to connect via WiFiManager and hit timeout. Rebooting...");
+    delay(3000);
+    ESP.restart(); // Reboot and try again
+    delay(5000);
   }
+
+  // If we get here, we are connected to Wi-Fi
+  Serial.println("\nConnected to Wi-Fi!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
   
-  if (!connected) {
-    Serial.println("\nWi-Fi connect timed out. Use Serial monitor or web UI to configure settings.");
-  }
+  // Fetch initial config from server now that we are connected
+  delay(1000);
+  fetchConfigFromServer();
+  updatePinStatesFromServer();
 
   // Маршрути сервера
   espServer.on("/control", HTTP_GET, handleControl);
