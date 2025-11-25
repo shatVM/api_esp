@@ -120,7 +120,12 @@ app.post('/api/config', (req, res) => {
   try {
     // Валідація та оновлення
     const newConfig = req.body;
-    config.enableAutoLight = !!newConfig.enableAutoLight;
+    // Only update enableAutoLight when explicitly provided to avoid other form posts
+    if (typeof newConfig.enableAutoLight !== 'undefined') {
+      const prev = config.enableAutoLight;
+      config.enableAutoLight = !!newConfig.enableAutoLight;
+      if (prev !== config.enableAutoLight) console.log(`[Config] enableAutoLight changed: ${prev} -> ${config.enableAutoLight}`);
+    }
     if (typeof newConfig.lightThreshold === 'number') {
       config.lightThreshold = newConfig.lightThreshold;
     }

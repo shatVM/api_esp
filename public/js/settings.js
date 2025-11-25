@@ -48,7 +48,7 @@ function updateCurrentTimeUTC2() {
   const tzDate = new Date(utcMs + 2 * 3600000);
   const pad = (n) => String(n).padStart(2, '0');
   const formatted = `${tzDate.getFullYear()}-${pad(tzDate.getMonth()+1)}-${pad(tzDate.getDate())} ${pad(tzDate.getHours())}:${pad(tzDate.getMinutes())}:${pad(tzDate.getSeconds())}`;
-  el.textContent = `Поточний час (UTC+2): ${formatted}`;
+  el.textContent = `${formatted}`;
 }
 
 // Return ISO-like string with +02:00 timezone, e.g. 2025-11-25T12:27:14+02:00

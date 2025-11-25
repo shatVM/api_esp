@@ -199,12 +199,12 @@ function initializeConfigControl() {
             if (!res.ok) throw new Error('Server returned an error');
             
             console.log('Configuration saved successfully!');
-            // Можна додати повідомлення для користувача
-            alert('Налаштування збережено!');
+            // show toast for success instead of alert
+            showToast('Налаштування збережено!', 'success');
 
         } catch (e) {
             console.error('Failed to save config:', e);
-            alert('Помилка при збереженні налаштувань.');
+            showToast('Помилка при збереженні налаштувань.', 'error');
         }
     });
 

@@ -306,7 +306,7 @@ async function deleteItem(id, liEl) {
         });
 
         if (!res.ok) {
-            alert('Failed to delete item. Server responded: ' + res.status);
+            showToast('Failed to delete item. Server responded: ' + res.status, 'error');
             return;
         }
 
@@ -330,7 +330,7 @@ async function deleteItem(id, liEl) {
         fetchList(currentPage, itemsPerPage);
     } catch (e) {
         console.error('Delete failed', e);
-        alert('An error occurred during deletion.');
+        showToast('An error occurred during deletion.', 'error');
     }
 }
 
@@ -346,7 +346,7 @@ async function deleteAllItems() {
         });
 
         if (!res.ok) {
-            alert('Failed to delete all items. Server responded: ' + res.status);
+            showToast('Failed to delete all items. Server responded: ' + res.status, 'error');
             return;
         }
 
@@ -367,7 +367,7 @@ async function deleteAllItems() {
         updatePagination(1);
     } catch (e) {
         console.error('Delete all failed', e);
-        alert('An error occurred during deletion.');
+        showToast('An error occurred during deletion.', 'error');
     }
 }
 
