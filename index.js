@@ -665,8 +665,21 @@ async function updatePinState(pinName, state) {
 // Endpoint to update the state of a specific pin
 app.post('/api/pins/:pin', async (req, res) => {
   try {
+    const pinName = req.params.pin;
     const { state } = req.body;
-    const result = await updatePinState(req.params.pin, state);
+    const result = await updatePinState(pinName, state);
+
+    // If pin12 was manually changed, disable the corresponding auto-light modes.
+    if (pinName === 'pin12') {
+      if (config.enableAutoLight || config.enableLightThreshold) {
+        console.log('[Auto-Light] Manual override on pin12 detected. Disabling automation.');
+        config.enableAutoLight = false;
+        config.enableLightThreshold = false;
+        // Persist the config change immediately.
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+      }
+    }
+
     res.json(result);
   } catch (e) {
     console.error(`[Pin Control] Failed to write pin ${req.params.pin} state:`, e);

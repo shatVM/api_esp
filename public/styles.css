@@ -562,11 +562,12 @@ empty .list-row {
 }
 
 @media (max-width: 768px) {
-  .two-col {
+  .two-col, .three-col {
     grid-template-columns: 1fr;
   }
   .sidebar {
     margin-bottom: 20px;
+    max-width: none; /* Allow sidebar to take full width on mobile */
   }
 }
 
