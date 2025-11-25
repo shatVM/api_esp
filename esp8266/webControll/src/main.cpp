@@ -61,17 +61,6 @@ struct Config {
   String wifiPasswords[5];
   bool wifiEnabled[5];
   int wifiCount = 0;
-  // Auto-light schedule (HH:MM strings)
-  String autoLightStartTime = "07:00";
-  String autoLightEndTime = "22:00";
-  // Last-saved local time reported by server (ISO string)
-  String lastSavedLocalTime = "";
-  // Parsed base time components from lastSavedLocalTime
-  int baseHour = -1;
-  int baseMin = 0;
-  int baseSec = 0;
-  // millis() when config with base time was fetched
-  unsigned long configFetchedAtMillis = 0;
 } config;
 
 // Forward declarations for functions used before their definitions
@@ -79,48 +68,7 @@ void fetchConfigFromServer();
 void updatePinStatesFromServer();
 void sendDataToServer();
 
-// Time helpers
-bool parseIsoTimeToHMS(const String &iso, int &h, int &m, int &s) {
-  // Expect format like YYYY-MM-DDTHH:MM:SS(+|-)TZ or YYYY-MM-DDTHH:MM:SS
-  if (iso.length() < 19) return false;
-  String hs = iso.substring(11, 13);
-  String ms = iso.substring(14, 16);
-  String ss = iso.substring(17, 19);
-  h = hs.toInt(); m = ms.toInt(); s = ss.toInt();
-  return true;
-}
-
-int timeStringToMinutes(const String &hhmm) {
-  if (hhmm.length() < 4) return -1;
-  int colon = hhmm.indexOf(':');
-  if (colon <= 0) return -1;
-  int h = hhmm.substring(0, colon).toInt();
-  int m = hhmm.substring(colon + 1).toInt();
-  return (h * 60 + m) % (24 * 60);
-}
-
-int getCurrentMinutesFromConfigBase() {
-  if (config.baseHour < 0) return -1;
-  unsigned long elapsedSec = (millis() - config.configFetchedAtMillis) / 1000;
-  long totalSec = (long)config.baseHour * 3600L + (long)config.baseMin * 60L + (long)config.baseSec + (long)elapsedSec;
-  int minutes = (totalSec / 60) % (24 * 60);
-  if (minutes < 0) minutes += 24 * 60;
-  return minutes;
-}
-
-bool isWithinAutoLightSchedule() {
-  int startM = timeStringToMinutes(config.autoLightStartTime);
-  int endM = timeStringToMinutes(config.autoLightEndTime);
-  int nowM = getCurrentMinutesFromConfigBase();
-  if (startM < 0 || endM < 0) return true; // no schedule -> always allowed
-  if (nowM < 0) return true; // no base time -> allow by default
-  if (startM <= endM) {
-    return (nowM >= startM && nowM < endM);
-  } else {
-    // Overnight window (e.g., 22:00 -> 06:00)
-    return (nowM >= startM || nowM < endM);
-  }
-}
+// Time helpers removed - logic is now on the server.
 
 // Bluetooth removed: use Serial monitor or web UI for configuration
 
@@ -178,30 +126,10 @@ void fetchConfigFromServer() {
     config.deviceName = doc["deviceName"].as<String>();
   }
 
-  // Parse auto-light schedule times
-  if (doc.containsKey("autoLightStartTime") && doc["autoLightStartTime"].is<const char*>()) {
-    config.autoLightStartTime = doc["autoLightStartTime"].as<String>();
-  }
-  if (doc.containsKey("autoLightEndTime") && doc["autoLightEndTime"].is<const char*>()) {
-    config.autoLightEndTime = doc["autoLightEndTime"].as<String>();
-  }
   
   // Parse enableLightThreshold (if true: use lux only, ignore schedule)
   if (doc.containsKey("enableLightThreshold")) {
     config.enableLightThreshold = doc["enableLightThreshold"].as<bool>();
-  }
-
-  // Parse server-saved local time (ISO) and record base components
-  if (doc.containsKey("lastSavedLocalTime") && doc["lastSavedLocalTime"].is<const char*>()) {
-    config.lastSavedLocalTime = doc["lastSavedLocalTime"].as<String>();
-    int h, m, s;
-    if (parseIsoTimeToHMS(config.lastSavedLocalTime, h, m, s)) {
-      config.baseHour = h; config.baseMin = m; config.baseSec = s;
-      config.configFetchedAtMillis = millis();
-      Serial.printf("Parsed base local time from server: %02d:%02d:%02d\n", h, m, s);
-    } else {
-      config.baseHour = -1;
-    }
   }
 
   // Parse WiFi networks
@@ -341,50 +269,8 @@ void sendDataToServer() {
   }
 
   // --- Device-side auto-light enforcement for PIN_12 ---
-  // New logic based on user request:
-  // - "enableAutoLight" checkbox controls schedule.
-  // - "enableLightThreshold" checkbox controls light level threshold.
-  // - If both are checked, they work together (AND logic).
-  bool shouldTurnOn = false;
-  bool autoModeActive = config.enableAutoLight || config.enableLightThreshold;
-
-  if (autoModeActive) {
-    bool isDark = (lux >= 0) ? (lux < config.lightThreshold) : false;
-    bool withinSchedule = isWithinAutoLightSchedule();
-
-    if (config.enableAutoLight && !config.enableLightThreshold) {
-      // Mode 1: Schedule only
-      shouldTurnOn = withinSchedule;
-      Serial.printf("Auto-light [SCHEDULE-ONLY mode]: inSchedule=%d\n", withinSchedule ? 1 : 0);
-    } else if (!config.enableAutoLight && config.enableLightThreshold) {
-      // Mode 2: Threshold only
-      shouldTurnOn = isDark;
-      Serial.printf("Auto-light [THRESHOLD-ONLY mode]: isDark=%d\n", isDark ? 1 : 0);
-    } else if (config.enableAutoLight && config.enableLightThreshold) {
-      // Mode 3: Schedule AND Threshold
-      shouldTurnOn = withinSchedule && isDark;
-      Serial.printf("Auto-light [SCHEDULE + LUX mode]: inSchedule=%d, isDark=%d\n",
-                    withinSchedule ? 1 : 0, isDark ? 1 : 0);
-    }
-  }
-
-  // Apply the final decision to the pin.
-  // If no auto mode was active, shouldTurnOn remains false, turning the pin OFF.
-  if (shouldTurnOn) {
-    digitalWrite(PIN_12, HIGH);
-    Serial.println("→ PIN_12 ON (auto)");
-  } else {
-    digitalWrite(PIN_12, LOW);
-    if (autoModeActive) {
-      Serial.println("→ PIN_12 OFF (auto)");
-    }
-  }
-
-  // Report current state of all controllable pins
-  JsonObject pins = jsonDoc.createNestedObject("pins");
-  pins["pin12"] = digitalRead(PIN_12);
-  pins["pin13"] = digitalRead(PIN_13);
-  pins["pin14"] = digitalRead(PIN_14);
+  // All auto-light logic is now handled by the server. This device only sends sensor
+  // data and applies the pin state it receives from the server.
 
   // --- Деталі про пристрій ---
   jsonDoc["macAddress"] = WiFi.macAddress();

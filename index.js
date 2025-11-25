@@ -247,29 +247,79 @@ app.post('/upload', async (req, res) => {
 
     sendSseEvent('new', record.data);
 
-    // If the device report includes pin states, update the server's master state.
-    if (data.pins && typeof data.pins === 'object') {
-      try {
+    // --- Server-side Auto-light Logic ---
+    // This logic now resides on the server, making it the source of truth.
+    const autoModeActive = config.enableAutoLight || config.enableLightThreshold;
+    if (autoModeActive && data.lux !== undefined) {
+        // Helper function to check if the current time is within the HH:MM schedule.
+        const isWithinSchedule = (start, end) => {
+            if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
+                console.warn('[Auto-Light] Invalid time format in schedule, defaulting to true.');
+                return true; // If schedule is invalid, default to always-on.
+            }
+            const now = new Date();
+            // The server generates timestamps in UTC+2, so we evaluate time in the same context for consistency.
+            const offsetHours = 2;
+            const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const tzDate = new Date(utcMs + (offsetHours * 3600000));
+            const nowMinutes = tzDate.getHours() * 60 + tzDate.getMinutes();
+            
+            const [startH, startM] = start.split(':').map(Number);
+            const startMinutes = startH * 60 + startM;
+            const [endH, endM] = end.split(':').map(Number);
+            const endMinutes = endH * 60 + endM;
+
+            if (startMinutes <= endMinutes) { // e.g., 07:00 to 22:00
+                return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+            } else { // e.g., 22:00 to 06:00 (overnight)
+                return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+            }
+        };
+
+        const withinSchedule = isWithinSchedule(config.autoLightStartTime, config.autoLightEndTime);
+        const isDark = data.lux < config.lightThreshold;
+        
+        let shouldTurnOn = false;
+
+        if (config.enableAutoLight && !config.enableLightThreshold) {
+            // Mode 1: Schedule only
+            shouldTurnOn = withinSchedule;
+        } else if (!config.enableAutoLight && config.enableLightThreshold) {
+            // Mode 2: Threshold only
+            shouldTurnOn = isDark;
+        } else if (config.enableAutoLight && config.enableLightThreshold) {
+            // Mode 3: Schedule AND Threshold
+            shouldTurnOn = withinSchedule && isDark;
+        }
+        
+        // Read the last known state and update only if it has changed.
         let currentPinStates = {};
         if (fs.existsSync(PINS_STATE_FILE)) {
-          currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+            try {
+                currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+            } catch (e) {
+                console.error('[Auto-Light] Failed to parse pins.json:', e);
+            }
         }
-        
-        // Create a new state object by merging device's report over the old state.
-        const newState = { ...currentPinStates, ...data.pins };
-        
-        // Only write to the file if there's an actual change.
-        if (JSON.stringify(currentPinStates) !== JSON.stringify(newState)) {
-          fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(newState, null, 2), 'utf8');
-          console.log(`[Pin State] Updated by device report. New state: ${JSON.stringify(newState)}`);
-        }
-      } catch (e) {
-        console.error('[Pin State] Failed to update pin states from device report:', e);
-      }
-    }
 
-    // The server-side auto-light logic that was here has been removed,
-    // as this responsibility has been moved to the ESP device itself.
+        const desiredState = shouldTurnOn ? 1 : 0;
+        if (currentPinStates.pin12 !== desiredState) {
+            console.log(`[Auto-Light] Server logic: lux=${data.lux}, schedule=${withinSchedule}. Changing pin12 to ${desiredState}.`);
+            await updatePinState('pin12', desiredState); // This function saves state and pushes to ESP.
+        }
+    } else if (!autoModeActive) {
+        // If all auto-modes are off, ensure the light is off.
+        let currentPinStates = {};
+         if (fs.existsSync(PINS_STATE_FILE)) {
+            try {
+                currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+            } catch (e) { console.error('[Auto-Light] Failed to parse pins.json:', e); }
+        }
+        if (currentPinStates.pin12 !== 0) {
+            console.log(`[Auto-Light] Server logic: All auto modes off. Turning pin12 OFF.`);
+            await updatePinState('pin12', 0);
+        }
+    }
 
     return res.status(200).json({ 
       status: 'ok', 
