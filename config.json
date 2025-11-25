@@ -4,7 +4,7 @@
   "uploadIntervalSeconds": 30,
   "autoLightStartTime": "12:47",
   "autoLightEndTime": "12:48",
-  "lastSavedLocalTime": "2025-11-25T12:46:38+02:00",
+  "lastSavedLocalTime": "2025-11-25T12:47:32+02:00",
   "wifi": [
     {
       "ssid": "POCOFree",
@@ -27,5 +27,5 @@
     "http://localhost/control"
   ],
   "deviceName": "3003",
-  "currentTime": "2025-11-25T12:46:38+02:00"
+  "currentTime": "2025-11-25T12:47:32+02:00"
 }
