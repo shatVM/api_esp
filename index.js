@@ -247,6 +247,27 @@ app.post('/upload', async (req, res) => {
 
     sendSseEvent('new', record.data);
 
+    // If the device report includes pin states, update the server's master state.
+    if (data.pins && typeof data.pins === 'object') {
+      try {
+        let currentPinStates = {};
+        if (fs.existsSync(PINS_STATE_FILE)) {
+          currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+        }
+        
+        // Create a new state object by merging device's report over the old state.
+        const newState = { ...currentPinStates, ...data.pins };
+        
+        // Only write to the file if there's an actual change.
+        if (JSON.stringify(currentPinStates) !== JSON.stringify(newState)) {
+          fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(newState, null, 2), 'utf8');
+          console.log(`[Pin State] Updated by device report. New state: ${JSON.stringify(newState)}`);
+        }
+      } catch (e) {
+        console.error('[Pin State] Failed to update pin states from device report:', e);
+      }
+    }
+
     // The server-side auto-light logic that was here has been removed,
     // as this responsibility has been moved to the ESP device itself.
 

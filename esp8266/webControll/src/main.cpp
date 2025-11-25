@@ -380,6 +380,12 @@ void sendDataToServer() {
     }
   }
 
+  // Report current state of all controllable pins
+  JsonObject pins = jsonDoc.createNestedObject("pins");
+  pins["pin12"] = digitalRead(PIN_12);
+  pins["pin13"] = digitalRead(PIN_13);
+  pins["pin14"] = digitalRead(PIN_14);
+
   // --- Деталі про пристрій ---
   jsonDoc["macAddress"] = WiFi.macAddress();
   jsonDoc["cpuFreqMHz"] = ESP.getCpuFreqMHz();
