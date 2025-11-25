@@ -187,6 +187,7 @@ async function loadConfig() {
     const cfg = await res.json();
 
     document.getElementById('enableAutoLight').checked = !!cfg.enableAutoLight;
+    document.getElementById('enableLightThreshold').checked = !!cfg.enableLightThreshold;
     document.getElementById('lightThreshold').value = cfg.lightThreshold || '';
     document.getElementById('uploadIntervalSeconds').value = cfg.uploadIntervalSeconds || '';
     // auto-light schedule
@@ -262,6 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       const payload = {};
       payload.enableAutoLight = !!document.getElementById('enableAutoLight').checked;
+      payload.enableLightThreshold = !!document.getElementById('enableLightThreshold').checked;
       payload.lightThreshold = Number(document.getElementById('lightThreshold').value) || 0;
       payload.uploadIntervalSeconds = Number(document.getElementById('uploadIntervalSeconds').value) || 0;
       // include start/end times if present

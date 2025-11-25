@@ -51,6 +51,7 @@ const unsigned long CONFIG_FETCH_INTERVAL = 300000; // Оновлювати ко
 // Конфігурація, завантажена з сервера
 struct Config {
   bool enableAutoLight = false;
+  bool enableLightThreshold = false;  // if true: use lux threshold only, ignore schedule
   int lightThreshold = 40;
   int uploadIntervalSeconds = 30;
   String deviceName = "esp8266_12E";
@@ -183,6 +184,11 @@ void fetchConfigFromServer() {
   }
   if (doc.containsKey("autoLightEndTime") && doc["autoLightEndTime"].is<const char*>()) {
     config.autoLightEndTime = doc["autoLightEndTime"].as<String>();
+  }
+  
+  // Parse enableLightThreshold (if true: use lux only, ignore schedule)
+  if (doc.containsKey("enableLightThreshold")) {
+    config.enableLightThreshold = doc["enableLightThreshold"].as<bool>();
   }
 
   // Parse server-saved local time (ISO) and record base components
@@ -334,16 +340,33 @@ void sendDataToServer() {
       Serial.println(F("Failed to read from BH1750 sensor!"));
   }
 
-  // --- Device-side auto-light enforcement for PIN_12 based on schedule ---
+  // --- Device-side auto-light enforcement for PIN_12 ---
+  // Logic: 
+  // - If enableLightThreshold: ignore schedule, use lux threshold only
+  // - If !enableLightThreshold: use schedule + lux threshold
   if (config.enableAutoLight) {
-    bool within = isWithinAutoLightSchedule();
-    bool shouldTurnOn = (lux >= 0) ? (lux < config.lightThreshold) : false;
-    if (within && shouldTurnOn) {
+    bool shouldTurnOn = false;
+    bool isDark = (lux >= 0) ? (lux < config.lightThreshold) : false;
+    
+    if (config.enableLightThreshold) {
+      // Mode 1: Lux threshold only (ignore schedule)
+      shouldTurnOn = isDark;
+      Serial.printf("Auto-light [LUX-ONLY mode]: lux=%.1f, threshold=%d, isDark=%d\n", 
+                    lux, config.lightThreshold, isDark ? 1 : 0);
+    } else {
+      // Mode 2: Lux + Schedule (schedule takes precedence)
+      bool within = isWithinAutoLightSchedule();
+      shouldTurnOn = within && isDark;
+      Serial.printf("Auto-light [SCHEDULE mode]: lux=%.1f, isDark=%d, inSchedule=%d\n", 
+                    lux, isDark ? 1 : 0, within ? 1 : 0);
+    }
+    
+    if (shouldTurnOn) {
       digitalWrite(PIN_12, HIGH);
-      Serial.println("Auto-light: turning PIN_12 ON (within schedule and dark)");
+      Serial.println("→ PIN_12 ON");
     } else {
       digitalWrite(PIN_12, LOW);
-      Serial.println("Auto-light: turning PIN_12 OFF (outside schedule or bright)");
+      Serial.println("→ PIN_12 OFF");
     }
   }
 

@@ -69,6 +69,7 @@ let lastConfigWriteTime = Date.now();
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 let config = {
   enableAutoLight: false,
+  enableLightThreshold: false,  // if true: ignore time schedule, use lux threshold only
   lightThreshold: 40,
   uploadIntervalSeconds: 30,
   // Auto-light schedule
@@ -129,6 +130,12 @@ app.post('/api/config', (req, res) => {
       const prev = config.enableAutoLight;
       config.enableAutoLight = !!newConfig.enableAutoLight;
       if (prev !== config.enableAutoLight) console.log(`[Config] enableAutoLight changed: ${prev} -> ${config.enableAutoLight}`);
+    }
+    // Update enableLightThreshold (mutually exclusive logic with time schedule)
+    if (typeof newConfig.enableLightThreshold !== 'undefined') {
+      const prev = config.enableLightThreshold;
+      config.enableLightThreshold = !!newConfig.enableLightThreshold;
+      if (prev !== config.enableLightThreshold) console.log(`[Config] enableLightThreshold changed: ${prev} -> ${config.enableLightThreshold}`);
     }
     if (typeof newConfig.lightThreshold === 'number') {
       config.lightThreshold = newConfig.lightThreshold;
