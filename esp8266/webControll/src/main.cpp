@@ -50,8 +50,8 @@ const unsigned long CONFIG_FETCH_INTERVAL = 300000; // Оновлювати ко
 
 // Конфігурація, завантажена з сервера
 struct Config {
-  bool enableAutoLight = false;
-  bool enableLightThreshold = false;  // if true: use lux threshold only, ignore schedule
+  bool enableAutoLight = false;      // If true, enables schedule-based control.
+  bool enableLightThreshold = false;  // If true, enables light level threshold control.
   int lightThreshold = 40;
   int uploadIntervalSeconds = 30;
   String deviceName = "esp8266_12E";
@@ -341,32 +341,42 @@ void sendDataToServer() {
   }
 
   // --- Device-side auto-light enforcement for PIN_12 ---
-  // Logic: 
-  // - If enableLightThreshold: ignore schedule, use lux threshold only
-  // - If !enableLightThreshold: use schedule + lux threshold
-  if (config.enableAutoLight) {
-    bool shouldTurnOn = false;
+  // New logic based on user request:
+  // - "enableAutoLight" checkbox controls schedule.
+  // - "enableLightThreshold" checkbox controls light level threshold.
+  // - If both are checked, they work together (AND logic).
+  bool shouldTurnOn = false;
+  bool autoModeActive = config.enableAutoLight || config.enableLightThreshold;
+
+  if (autoModeActive) {
     bool isDark = (lux >= 0) ? (lux < config.lightThreshold) : false;
-    
-    if (config.enableLightThreshold) {
-      // Mode 1: Lux threshold only (ignore schedule)
+    bool withinSchedule = isWithinAutoLightSchedule();
+
+    if (config.enableAutoLight && !config.enableLightThreshold) {
+      // Mode 1: Schedule only
+      shouldTurnOn = withinSchedule;
+      Serial.printf("Auto-light [SCHEDULE-ONLY mode]: inSchedule=%d\n", withinSchedule ? 1 : 0);
+    } else if (!config.enableAutoLight && config.enableLightThreshold) {
+      // Mode 2: Threshold only
       shouldTurnOn = isDark;
-      Serial.printf("Auto-light [LUX-ONLY mode]: lux=%.1f, threshold=%d, isDark=%d\n", 
-                    lux, config.lightThreshold, isDark ? 1 : 0);
-    } else {
-      // Mode 2: Lux + Schedule (schedule takes precedence)
-      bool within = isWithinAutoLightSchedule();
-      shouldTurnOn = within && isDark;
-      Serial.printf("Auto-light [SCHEDULE mode]: lux=%.1f, isDark=%d, inSchedule=%d\n", 
-                    lux, isDark ? 1 : 0, within ? 1 : 0);
+      Serial.printf("Auto-light [THRESHOLD-ONLY mode]: isDark=%d\n", isDark ? 1 : 0);
+    } else if (config.enableAutoLight && config.enableLightThreshold) {
+      // Mode 3: Schedule AND Threshold
+      shouldTurnOn = withinSchedule && isDark;
+      Serial.printf("Auto-light [SCHEDULE + LUX mode]: inSchedule=%d, isDark=%d\n",
+                    withinSchedule ? 1 : 0, isDark ? 1 : 0);
     }
-    
-    if (shouldTurnOn) {
-      digitalWrite(PIN_12, HIGH);
-      Serial.println("→ PIN_12 ON");
-    } else {
-      digitalWrite(PIN_12, LOW);
-      Serial.println("→ PIN_12 OFF");
+  }
+
+  // Apply the final decision to the pin.
+  // If no auto mode was active, shouldTurnOn remains false, turning the pin OFF.
+  if (shouldTurnOn) {
+    digitalWrite(PIN_12, HIGH);
+    Serial.println("→ PIN_12 ON (auto)");
+  } else {
+    digitalWrite(PIN_12, LOW);
+    if (autoModeActive) {
+      Serial.println("→ PIN_12 OFF (auto)");
     }
   }
 

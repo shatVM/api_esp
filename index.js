@@ -68,8 +68,8 @@ let lastConfigWriteTime = Date.now();
 
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 let config = {
-  enableAutoLight: false,
-  enableLightThreshold: false,  // if true: ignore time schedule, use lux threshold only
+  enableAutoLight: false,         // If true, enables schedule-based control.
+  enableLightThreshold: false,  // If true, enables light level threshold control.
   lightThreshold: 40,
   uploadIntervalSeconds: 30,
   // Auto-light schedule
@@ -247,21 +247,8 @@ app.post('/upload', async (req, res) => {
 
     sendSseEvent('new', record.data);
 
-    // --- Auto-light Logic ---
-    if (config.enableAutoLight && data.lux !== undefined) {
-      const desiredState = data.lux < config.lightThreshold ? 1 : 0;
-      
-      let currentPinStates = {};
-      if (fs.existsSync(PINS_STATE_FILE)) {
-        currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
-      }
-      
-      if (currentPinStates.pin12 !== desiredState) {
-        console.log(`[Auto-Light] Lux is ${data.lux}, threshold is ${config.lightThreshold}. Changing pin12 to ${desiredState}`);
-        await updatePinState('pin12', desiredState);
-      }
-    }
-    // --- End Auto-light Logic ---
+    // The server-side auto-light logic that was here has been removed,
+    // as this responsibility has been moved to the ESP device itself.
 
     return res.status(200).json({ 
       status: 'ok', 
