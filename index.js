@@ -62,6 +62,10 @@ app.use((req, res, next) => {
 // Зберігаємо останню відому IP-адресу пристрою
 let lastKnownIp = null;
 
+// Batching: track pending config writes and throttle file I/O
+let configNeedsWrite = false;
+let lastConfigWriteTime = Date.now();
+
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 let config = {
   enableAutoLight: false,
@@ -169,6 +173,7 @@ app.post('/api/config', (req, res) => {
       // also mirror into lastSavedLocalTime for backward compatibility / ESP base time
       config.lastSavedLocalTime = newConfig.currentTime;
       console.log(`[Time Update] currentTime received from UI: ${config.currentTime}`);
+      configNeedsWrite = true; // Mark for batched write
     }
     
     // Save server-side timestamp in UTC+2 to help devices/local display
@@ -187,8 +192,20 @@ app.post('/api/config', (req, res) => {
       config.lastSavedLocalTime = new Date().toISOString();
     }
 
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
-    console.log('Configuration updated:', config);
+    // Batched write: only write file when uploadIntervalSeconds has elapsed OR config change (not currentTime-only)
+    const timeSinceLastWrite = Date.now() - lastConfigWriteTime;
+    const writeIntervalMs = (config.uploadIntervalSeconds || 30) * 1000;
+    const isNonTimedChange = Object.keys(newConfig).some(k => k !== 'currentTime');
+    
+    if (isNonTimedChange || timeSinceLastWrite >= writeIntervalMs) {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+      lastConfigWriteTime = Date.now();
+      configNeedsWrite = false;
+      console.log('Configuration persisted to file:', config);
+    } else if (configNeedsWrite) {
+      console.log(`[Batched] Config updated in memory, will persist in ${Math.round((writeIntervalMs - timeSinceLastWrite) / 1000)}s`);
+    }
+    
     res.json({ status: 'ok', config });
   } catch (e) {
     console.error('Failed to write config:', e);
