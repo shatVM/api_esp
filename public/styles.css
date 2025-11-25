@@ -739,7 +739,7 @@ input:checked + .slider:before {
   z-index: 9999;
 }
 
-.wifi-enabled {
+input[type="checkbox"] {
   width: 18px;
   height: 18px;
   cursor: pointer;

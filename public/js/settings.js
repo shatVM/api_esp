@@ -116,8 +116,14 @@ function createWifiItem(item = { ssid: '', password: '', enabled: true }) {
   cb.addEventListener('change', () => { wrapper.classList.toggle('unactive', !cb.checked); applyWifiEnabledState(); wrapper.classList.add('unsaved'); });
   // initial state
   applyWifiEnabledState();
-  // render icons if lucide is available
-  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+  // render icons if lucide is available - target only this item's icons
+  if (window.lucide && typeof lucide.createIcons === 'function') {
+    // Use setTimeout to ensure icons are rendered after DOM insertion
+    setTimeout(() => {
+      const icons = wrapper.querySelectorAll('[data-lucide]');
+      if (icons.length > 0) lucide.createIcons();
+    }, 0);
+  }
 
   return wrapper;
 }
@@ -162,8 +168,14 @@ function createServerItem(value = '') {
   cb.addEventListener('change', () => { wrapper.classList.toggle('unactive', !cb.checked); applyServerEnabledState(); wrapper.classList.add('unsaved'); });
   applyServerEnabledState();
 
-  // render icons if lucide is available
-  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+  // render icons if lucide is available - target only this item's icons
+  if (window.lucide && typeof lucide.createIcons === 'function') {
+    // Use setTimeout to ensure icons are rendered after DOM insertion
+    setTimeout(() => {
+      const icons = wrapper.querySelectorAll('[data-lucide]');
+      if (icons.length > 0) lucide.createIcons();
+    }, 0);
+  }
 
   return wrapper;
 }

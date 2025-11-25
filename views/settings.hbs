@@ -33,12 +33,10 @@
                             <label for="autoLightEndTime">Час закінчення (HH:MM)</label>
                             <input type="time" id="autoLightEndTime" name="autoLightEndTime" class="form-control">
                         </div>
-                        <div class="form-note" style="margin-top:8px; color:#6b7280; font-size:0.9rem;">
-                            Останнє збереження налаштувань (UTC+2): <span id="lastSavedTime">—</span>
-                        </div>
+                        
                         <div class="form-switch sensor-item">
                             <input type="checkbox" id="enableLightThreshold" name="enableLightThreshold">
-                            <label for="enableLightThreshold">Використовувати поріг освітлення замість розкладу</label>
+                            <label for="enableLightThreshold">Поріг освітлення замість розкладу</label>
                         </div>
                         <div class="form-group sensor-item">
                             <label for="lightThreshold">Поріг освітлення (lux)</label>
@@ -49,8 +47,11 @@
                             <input type="number" id="uploadIntervalSeconds" name="uploadIntervalSeconds" class="form-control">
                         </div>
                         <div style="margin-top:12px; display:flex; gap:8px;">
-                            <button type="submit" class="btn success"><i data-lucide="save" style="margin-right:6px"></i>Зберегти</button>
-                            <button type="reset" class="btn warning"><i data-lucide="refresh-ccw" style="margin-right:6px"></i>Скинути</button>
+                            <button type="submit" class="btn success"><i data-lucide="save" style="margin-right:6px"></i></button>
+                            <button type="reset" class="btn warning"><i data-lucide="refresh-ccw" style="margin-right:6px"></i></button>
+                        </div>
+                        <div class="form-note" style="margin-top:8px; color:#6b7280; font-size:0.9rem;">
+                            Останнє збереження налаштувань (UTC+2): <span id="lastSavedTime">—</span>
                         </div>
                     </form>
                 </div>
@@ -67,20 +68,20 @@
                             <h3 style="margin-top:1rem">WiFi (список мереж)</h3>
                             <div id="wifiList" style="margin-bottom:8px"></div>
                             <div style="display:flex; gap:8px; margin-bottom:8px;">
-                                <button id="addWifiBtn" type="button" class="btn info"><i data-lucide="plus-circle" style="margin-right:6px"></i>Додати мережу</button>
+                                <button id="addWifiBtn" type="button" class="btn info"><i data-lucide="plus-circle" style="margin-right:6px"></i></button>
                                 <small style="align-self:center; color:#6b7280">Виберіть потрібні мережі та впорядкуйте</small>
                             </div>
 
                             <h3 style="margin-top:1rem">Адреси для надсилання (сервери)</h3>
                             <div id="sendAddressesList" style="margin-bottom:8px"></div>
                             <div style="display:flex; gap:8px; margin-bottom:8px;">
-                                <button id="addAddressBtn" type="button" class="btn info"><i data-lucide="plus-circle" style="margin-right:6px"></i>Додати сервер/адресу</button>
-                                <small style="align-self:center; color:#6b7280">Вкажіть URL або електронну адресу</small>
+                                <button id="addAddressBtn" type="button" class="btn info"><i data-lucide="plus-circle" style="margin-right:6px"></i></button>
+                                <small style="align-self:center; color:#6b7280">URL</small>
                             </div>
 
                             <div style="margin-top:12px; display:flex; gap:8px;">
-                                <button type="submit" class="btn success"><i data-lucide="save" style="margin-right:6px"></i>Зберегти</button>
-                                <button type="reset" class="btn warning"><i data-lucide="refresh-ccw" style="margin-right:6px"></i>Скинути</button>
+                                <button type="submit" class="btn success"><i data-lucide="save" style="margin-right:6px"></i></button>
+                                <button type="reset" class="btn warning"><i data-lucide="refresh-ccw" style="margin-right:6px"></i></button>
                             </div>
                         </form>
                     </div>
