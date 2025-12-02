@@ -227,6 +227,15 @@ async function loadConfig() {
     if (addresses.length === 0) list.appendChild(createServerItem(''));
     addresses.forEach(a => list.appendChild(createServerItem(a)));
 
+    // MQTT settings
+    if (cfg.mqtt) {
+      document.getElementById('mqttEnabled').checked = !!cfg.mqtt.enabled;
+      document.getElementById('mqttBrokerUrl').value = cfg.mqtt.brokerUrl || '';
+      document.getElementById('mqttUsername').value = cfg.mqtt.username || '';
+      document.getElementById('mqttPassword').value = cfg.mqtt.password || '';
+      document.getElementById('mqttBaseTopic').value = cfg.mqtt.baseTopic || '';
+    }
+
   } catch (e) {
     console.error('loadConfig error', e);
     showToast('Помилка завантаження конфігу', 'error');
@@ -352,6 +361,37 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error('Failed to save general config', err);
         showToast('Помилка при збереженні загальних налаштувань: ' + err.message, 'error');
+      }
+    });
+  }
+
+  // MQTT form
+  const mqttForm = document.getElementById('mqttForm');
+  if (mqttForm) {
+    mqttForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        mqtt: {
+          enabled: !!document.getElementById('mqttEnabled').checked,
+          brokerUrl: document.getElementById('mqttBrokerUrl').value || '',
+          username: document.getElementById('mqttUsername').value || '',
+          password: document.getElementById('mqttPassword').value || '',
+          baseTopic: document.getElementById('mqttBaseTopic').value || '',
+        }
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Save failed: ' + res.status);
+        await res.json();
+        showToast('MQTT налаштування збережено', 'success');
+      } catch (err) {
+        console.error('Failed to save MQTT config', err);
+        showToast('Помилка при збереженні MQTT налаштувань: ' + err.message, 'error');
       }
     });
   }

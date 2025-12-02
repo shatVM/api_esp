@@ -1,391 +1,76 @@
+// ==== main.cpp for ESP8266 with MQTT Communication ====
+// This code replaces the previous HTTP-based logic with MQTT.
+//
+// PLEASE MAKE SURE to add the following line to your platformio.ini
+// under the [env:...] section's `lib_deps`:
+//
+// lib_deps =
+//   ... other libraries
+//   knolleary/PubSubClient
+//
+
+#include <ESP8266WiFi.h>
 #include <WiFiManager.h>
-#include <ESP8266HTTPClient.h>
-#include <ESP8266WebServer.h>
-#include <WiFiClientSecure.h>
+#include <PubSubClient.h> // MQTT Library
+#include <ESP8266HTTPClient.h> // Needed for initial config fetch
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h> // Required for HTTPS
+#include <memory> // Required for std::unique_ptr
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <Adafruit_AHTX0.h>
 #include <BH1750.h>
 #include <Wire.h>
-#include <EEPROM.h>
 
-// Для WPA2-Enterprise
-const char* WIFI_SSID = "FreeZSTU";
-const char* WIFI_PASSWORD = "";
+// --- Pin Definitions ---
+const int PIN_12 = 12; // D6
+const int PIN_13 = 13; // D7
+const int PIN_14 = 14; // D5
 
-// --- Налаштування серверів ---
-const char* PUBLIC_SERVER_HOST = "api-esp-tnww.onrender.com";
-const int PUBLIC_SERVER_PORT = 443;
-const char* LOCAL_SERVER_HOST = "192.168.1.115";
-const int LOCAL_SERVER_PORT = 80;
-const char* CONFIG_SERVER_HOST = "api-esp-tnww.onrender.com";
-const int CONFIG_SERVER_PORT = 443;
-
-unsigned long UPLOAD_INTERVAL = 1000; // 1 секунда (буде оновлюватися з сервера)
-const unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000;
-
-// --- Піни для керування ---
-const int PIN_12 = 12; // D6 -> GPIO12
-const int PIN_13 = 13; // D7 -> GPIO13
-const int PIN_14 = 14; // D5 -> GPIO14
-
-// --- Налаштування DHT сенсора ---
+// --- Sensor Setup ---
 #define DHTPIN 2
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
-
-// --- Налаштування I2C сенсорів ---
 Adafruit_AHTX0 aht;
 BH1750 lightMeter;
-
-// --- Налаштування АЦП для вимірювання напруги ---
 const int ADC_PIN = A0;
 const float VOLTAGE_DIVIDER_RATIO = 5.0;
 
-// --- Глобальні об'єкти ---
-ESP8266WebServer espServer(80);
-unsigned long lastUploadTime = 0;
-unsigned long lastConfigFetchTime = 0;
-const unsigned long CONFIG_FETCH_INTERVAL = 300000; // Оновлювати конфіг кожні 5 хвилин
-
-// Конфігурація, завантажена з сервера
+// --- Configuration Struct ---
+// This struct holds all settings for the device.
+// It's initially populated by an HTTP call, then updated via MQTT.
 struct Config {
-  bool enableAutoLight = false;      // If true, enables schedule-based control.
-  bool enableLightThreshold = false;  // If true, enables light level threshold control.
-  int lightThreshold = 40;
+  // MQTT Settings
+  bool mqttEnabled = false;
+  String mqttBrokerUrl = "";
+  int mqttPort = 1883;
+  String mqttUsername = "";
+  String mqttPassword = "";
+  String mqttBaseTopic = "esp_device";
+
+  // Device Settings
   int uploadIntervalSeconds = 30;
-  String deviceName = "esp8266_12E";
-  String sendAddresses[10]; // Max 10 addresses
-  int sendAddressCount = 0;
+  String deviceName = "esp8266_device";
 } config;
 
-// Forward declarations for functions used before their definitions
-void fetchConfigFromServer();
-void updatePinStatesFromServer();
-void sendDataToServer();
 
-// Time helpers removed - logic is now on the server.
+// --- Global Objects ---
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+unsigned long lastUploadTime = 0;
+unsigned long lastMqttReconnectAttempt = 0;
 
-// Bluetooth removed: use Serial monitor or web UI for configuration
+// --- Forward Declarations ---
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+void reconnectMqtt();
+void fetchInitialConfig();
 
-// --- Функція завантаження конфігурації з сервера ---
-void fetchConfigFromServer() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Not connected to Wi-Fi, cannot fetch config");
-    return;
-  }
-
-  HTTPClient http;
-  WiFiClientSecure clientSecure;
-  clientSecure.setInsecure();
-  
-  String url = "https://" + String(CONFIG_SERVER_HOST) + "/api/config";
-  Serial.print("Fetching config from: ");
-  Serial.println(url);
-
-  if (!http.begin(clientSecure, url)) {
-    Serial.println("HTTP begin() failed");
-    return;
-  }
-
-  int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK) {
-    Serial.printf("Failed to fetch config, HTTP code: %d\n", httpCode);
-    http.end();
-    return;
-  }
-
-  String payload = http.getString();
-  http.end();
-
-  const size_t capacity = JSON_OBJECT_SIZE(20) + 1024;
-  DynamicJsonDocument doc(capacity);
-  DeserializationError error = deserializeJson(doc, payload);
-  
-  if (error) {
-    Serial.print("deserializeJson() failed: ");
-    Serial.println(error.c_str());
-    return;
-  }
-
-  // Parse auto-light settings
-  if (doc.containsKey("enableAutoLight")) {
-    config.enableAutoLight = doc["enableAutoLight"].as<bool>();
-  }
-  if (doc.containsKey("lightThreshold")) {
-    config.lightThreshold = doc["lightThreshold"].as<int>();
-  }
-  if (doc.containsKey("uploadIntervalSeconds")) {
-    UPLOAD_INTERVAL = doc["uploadIntervalSeconds"].as<int>() * 1000;
-  }
-  if (doc.containsKey("deviceName")) {
-    config.deviceName = doc["deviceName"].as<String>();
-  }
-
-  
-  // Parse enableLightThreshold (if true: use lux only, ignore schedule)
-  if (doc.containsKey("enableLightThreshold")) {
-    config.enableLightThreshold = doc["enableLightThreshold"].as<bool>();
-  }
-
-  // Parse send addresses
-  if (doc.containsKey("sendAddresses") && doc["sendAddresses"].is<JsonArray>()) {
-    JsonArray addrArray = doc["sendAddresses"].as<JsonArray>();
-    config.sendAddressCount = min(10, (int)addrArray.size());
-    for (int i = 0; i < config.sendAddressCount; i++) {
-      config.sendAddresses[i] = addrArray[i].as<String>();
-    }
-  }
-
-  Serial.println("Config fetched successfully!");
-  Serial.printf("Device: %s, Interval: %lu ms, AutoLight: %d\n", 
-    config.deviceName.c_str(), UPLOAD_INTERVAL, config.enableAutoLight);
-}
-
-// --- Вспоміжні ---
-void handleNotFound() {
-  espServer.send(404, "text/plain", "Not Found");
-}
-
-// --- Функція обробки команд ---
-void handleControl() {
-  int pin = -1;
-  int state = -1;
-
-  if (espServer.hasArg("pin") && espServer.hasArg("state")) {
-    pin = espServer.arg("pin").toInt();
-    state = espServer.arg("state").toInt();
-
-    // Логіка для пінів керування
-    if ((pin == PIN_12 || pin == PIN_13 || pin == PIN_14) && (state == 0 || state == 1)) {
-      Serial.printf("Control Request: Set pin %d to state %d\n", pin, state);
-      pinMode(pin, OUTPUT);
-      digitalWrite(pin, state ? HIGH : LOW);
-      espServer.send(200, "text/plain", "OK");
-      return;
-    }
-  }
-
-  Serial.println("Bad control request");
-  espServer.send(400, "text/plain", "Bad Request: 'pin' and 'state' parameters are required and must be valid.");
-}
-
-// --- Функція відправки даних на сервер ---
-void sendDataToServer() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Not connected to Wi-Fi, skipping upload.");
-    return;
-  }
-
-  // Refresh configuration from server before each upload
-  Serial.println("Refreshing config from server before upload...");
-  fetchConfigFromServer();
-
-  // Log current config to Serial for debugging
-  Serial.println(F("=== Current Config ==="));
-  Serial.printf("deviceName: %s\n", config.deviceName.c_str());
-  Serial.printf("uploadInterval_ms: %lu\n", UPLOAD_INTERVAL);
-  Serial.printf("enableAutoLight: %d\n", config.enableAutoLight ? 1 : 0);
-  Serial.printf("lightThreshold: %d\n", config.lightThreshold);
-  Serial.printf("sendAddressCount: %d\n", config.sendAddressCount);
-  for (int i = 0; i < config.sendAddressCount; i++) {
-    Serial.printf("  addr[%d]: %s\n", i, config.sendAddresses[i].c_str());
-  }
-  Serial.println(F("======================="));
-
-  // --- Підготовка JSON-даних ---
-  const size_t capacity = 1024;
-  DynamicJsonDocument jsonDoc(capacity);
-
-  jsonDoc["ip"] = WiFi.localIP().toString();
-  jsonDoc["uptime_ms"] = millis();
-  jsonDoc["gateway_ip"] = WiFi.gatewayIP().toString();
-  jsonDoc["rssi_dbm"] = WiFi.RSSI();
-  jsonDoc["deviceName"] = config.deviceName;
-  
-  // --- Дані з сенсорів ---
-  // DHT11
-  float humidity_dht = dht.readHumidity();
-  float temperature_dht = dht.readTemperature();
-  if (!isnan(humidity_dht)) jsonDoc["humidity_dht_pct"] = humidity_dht;
-  if (!isnan(temperature_dht)) jsonDoc["temperature_dht_c"] = temperature_dht;
-
-  // AHTx0
-  sensors_event_t humidity_aht, temp_aht;
-  if (aht.getEvent(&humidity_aht, &temp_aht)) {
-    jsonDoc["temperature_aht_c"] = temp_aht.temperature;
-    jsonDoc["humidity_aht_pct"] = humidity_aht.relative_humidity;
-  }
-
-  // BH1750
-  float lux = lightMeter.readLightLevel();
-  if (lux >= 0) {
-      jsonDoc["lux"] = lux;
-  } else {
-      Serial.println(F("Failed to read from BH1750 sensor!"));
-  }
-
-  // --- Device-side auto-light enforcement for PIN_12 ---
-  // All auto-light logic is now handled by the server. This device only sends sensor
-  // data and applies the pin state it receives from the server.
-
-  // --- Деталі про пристрій ---
-  jsonDoc["macAddress"] = WiFi.macAddress();
-  jsonDoc["cpuFreqMHz"] = ESP.getCpuFreqMHz();
-  jsonDoc["flashSizeMB"] = ESP.getFlashChipSize() / (1024.0 * 1024.0);
-  jsonDoc["sdkVersion"] = ESP.getSdkVersion();
-  jsonDoc["ssid"] = WiFi.SSID();
-  jsonDoc["channel"] = WiFi.channel();
-  jsonDoc["chipModel"] = "ESP8266";
-
-  // --- Напруга батареї ---
-  const int NUM_SAMPLES = 10;
-  long adcTotal = 0;
-  for (int i = 0; i < NUM_SAMPLES; i++) {
-    adcTotal += analogRead(ADC_PIN);
-    delay(2);
-  }
-  int adcValue = adcTotal / NUM_SAMPLES;
-  float batteryVoltage = adcValue / 1023.0 * VOLTAGE_DIVIDER_RATIO;
-  jsonDoc["battery_v"] = batteryVoltage;
-
-  String jsonString;
-  serializeJson(jsonDoc, jsonString);
-
-  // --- Лямбда-функція для POST-запиту ---
-  auto performPost = [&](WiFiClient& client, const String& host, int port, const String& path, bool isHttps) -> bool {
-    HTTPClient http;
-    String serverUrl = (isHttps ? "https" : "http") + String("://") + host + ":" + String(port) + path;
-    Serial.printf("Attempting to send data to: %s\n", serverUrl.c_str());
-    Serial.println(jsonString);
-
-    if (!http.begin(client, serverUrl)) {
-      Serial.println("HTTP begin() failed");
-      return false;
-    }
-    http.addHeader("Content-Type", "application/json");
-    int httpCode = http.POST(jsonString);
-    String payload = http.getString();
-    Serial.printf("HTTP Response code: %d\n", httpCode);
-    Serial.println("Response: " + payload);
-    http.end();
-    return (httpCode >= 200 && httpCode < 300);
-  };
-
-  // --- Спроба відправки на налаштовані адреси ---
-  bool success = false;
-  if (config.sendAddressCount == 0) {
-    // Fallback: If no send addresses are configured, send to the default public host.
-    Serial.println("No send addresses configured, falling back to PUBLIC_SERVER_HOST.");
-    WiFiClientSecure clientSecure;
-    clientSecure.setInsecure();
-    success = performPost(clientSecure, PUBLIC_SERVER_HOST, PUBLIC_SERVER_PORT, "/upload", true);
-  } else {
-    // Send to all configured addresses until one succeeds.
-    for (int i = 0; i < config.sendAddressCount; i++) {
-      String url = config.sendAddresses[i];
-      if (url.length() == 0) continue;
-      
-      Serial.printf("Trying send address %d: %s\n", i, url.c_str());
-      
-      // Parse URL to get host, port, and path
-      bool isHttps = url.startsWith("https");
-      int protoEnd = url.indexOf("://") + 3;
-      int hostEnd = url.indexOf('/', protoEnd);
-      if (hostEnd == -1) hostEnd = url.length();
-      
-      String hostPart = url.substring(protoEnd, hostEnd);
-      String path = hostEnd < url.length() ? url.substring(hostEnd) : "/upload";
-      
-      int portPos = hostPart.indexOf(':');
-      String host = portPos > 0 ? hostPart.substring(0, portPos) : hostPart;
-      int port = portPos > 0 ? hostPart.substring(portPos + 1).toInt() : (isHttps ? 443 : 80);
-      
-      if (isHttps) {
-        WiFiClientSecure clientSecure;
-        clientSecure.setInsecure();
-        success = performPost(clientSecure, host, port, path, true);
-      } else {
-        WiFiClient client;
-        success = performPost(client, host, port, path, false);
-      }
-      
-      if (success) break;
-    }
-  }
-
-  if (success) Serial.println("Data sent successfully.");
-  else Serial.println("Failed to send data to all configured servers.");
-  Serial.println("-------------------- ");
-}
-
-// --- Функція оновлення стану пінів з сервера ---
-void updatePinStatesFromServer() {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  Serial.println(F("--- Starting pin state update ---"));
-  auto performPinStateGet = [&](const char* host, int port, bool isHttps) -> bool {
-    HTTPClient http;
-    String url = (isHttps ? "https" : "http") + String("://") + host + ":" + String(port) + "/pinstate";
-    Serial.print(F("Requesting pin states from: ")); Serial.println(url);
-
-    bool beginSuccess = false;
-    if (isHttps) {
-      WiFiClientSecure clientSecure;
-      clientSecure.setInsecure();
-      beginSuccess = http.begin(clientSecure, url);
-    } else {
-      WiFiClient client;
-      beginSuccess = http.begin(client, url);
-    }
-    if (!beginSuccess) { Serial.println(F("... HTTP begin failed.")); return false; }
-
-    int httpCode = http.GET();
-    if (httpCode != HTTP_CODE_OK) {
-      Serial.printf("... Failed, HTTP code: %d\n", httpCode);
-      http.end();
-      return false;
-    }
-
-    String payload = http.getString();
-    http.end();
-    Serial.print(F("... Received pin states: ")); Serial.println(payload);
-
-    const size_t capacity = JSON_OBJECT_SIZE(3) + 64; // 3 піни
-    DynamicJsonDocument doc(capacity);
-    DeserializationError error = deserializeJson(doc, payload);
-    if (error) { Serial.print(F("... deserializeJson() failed: ")); Serial.println(error.c_str()); return false; }
-
-    // Застосовуємо стан нових пінів
-    if (doc.containsKey("pin12")) digitalWrite(PIN_12, doc["pin12"].as<int>());
-    if (doc.containsKey("pin13")) digitalWrite(PIN_13, doc["pin13"].as<int>());
-    if (doc.containsKey("pin14")) digitalWrite(PIN_14, doc["pin14"].as<int>());
-    
-    return true;
-  };
-
-  bool success = performPinStateGet(PUBLIC_SERVER_HOST, PUBLIC_SERVER_PORT, true);
-  if (!success) {
-    Serial.println(F("Public server failed for pin states. Falling back to local..."));
-    success = performPinStateGet(LOCAL_SERVER_HOST, LOCAL_SERVER_PORT, false);
-  }
-
-  if (success) Serial.println(F("Pin states updated successfully."));
-  else Serial.println(F("Failed to update pin states from any server."));
-  Serial.println(F("----------------------------------------"));
-}
-
-// --- SETUP ---
 void setup() {
   Serial.begin(115200);
-  Serial.println("\nESP8266 Starting...");
+  Serial.println("\n[INFO] Booting device with MQTT support...");
 
-  // Bluetooth removed: configure via Serial monitor or web UI
-  
-  // Ініціалізація I2C
+  // --- Initialize Hardware ---
   Wire.begin(4, 5); // SDA: GPIO4 (D2), SCL: GPIO5 (D1)
-
-  // Ініціалізація пінів керування
   pinMode(PIN_12, OUTPUT);
   pinMode(PIN_13, OUTPUT);
   pinMode(PIN_14, OUTPUT);
@@ -393,78 +78,231 @@ void setup() {
   digitalWrite(PIN_13, LOW);
   digitalWrite(PIN_14, LOW);
 
-  // Ініціалізація DHT сенсора
   dht.begin();
+  if (!aht.begin()) Serial.println("[WARN] AHTx0 sensor not found!");
+  if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) Serial.println("[WARN] BH1750 sensor not found!");
 
-  // Ініціалізація AHTx0
-  if (!aht.begin()) {
-    Serial.println("Could not find AHTx0? Check wiring");
-  } else {
-    Serial.println("AHTx0 found");
-  }
-
-  // Ініціалізація BH1750
-  if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {
-    Serial.println(F("Could not find BH1750? Check wiring"));
-  } else {
-    Serial.println(F("BH1750 found"));
-  }
-
-  // --- WiFiManager Setup ---
-  // WiFiManager will connect to a known network or start a configuration portal.
+  // --- WiFi Setup ---
   WiFiManager wifiManager;
-
-  // Uncomment for testing to reset saved credentials:
-  // wifiManager.resetSettings();
-
-  // Set a timeout for the portal. If no one configures it, the device will reboot.
-  wifiManager.setConfigPortalTimeout(180); // 3 minutes
-
-  Serial.println("Starting WiFiManager...");
-  // Use the device name for the portal AP name, or a default.
+  // wifiManager.resetSettings(); // Uncomment to clear saved WiFi credentials
+  wifiManager.setConfigPortalTimeout(180);
   String apName = "ESP-Config-" + String(ESP.getChipId(), HEX);
-
   if (!wifiManager.autoConnect(apName.c_str())) {
-    Serial.println("Failed to connect via WiFiManager and hit timeout. Rebooting...");
+    Serial.println("[FATAL] Failed to connect to WiFi. Rebooting...");
     delay(3000);
-    ESP.restart(); // Reboot and try again
-    delay(5000);
+    ESP.restart();
   }
-
-  // If we get here, we are connected to Wi-Fi
-  Serial.println("\nConnected to Wi-Fi!");
-  Serial.print("IP Address: ");
+  Serial.println("[INFO] WiFi connected!");
+  Serial.print("  IP Address: ");
   Serial.println(WiFi.localIP());
-  
-  // Fetch initial config from server now that we are connected
-  delay(1000);
-  fetchConfigFromServer();
-  updatePinStatesFromServer();
 
-  // Маршрути сервера
-  espServer.on("/control", HTTP_GET, handleControl);
-  espServer.onNotFound(handleNotFound);
-  espServer.begin();
-  Serial.println("ESP Web Server started. Control endpoint is at /control");
+  // --- Initial Configuration ---
+  // Fetch the full configuration via HTTP once on boot to get MQTT broker details.
+  fetchInitialConfig();
+
+  // --- MQTT Setup ---
+  if (config.mqttEnabled) {
+    String broker = config.mqttBrokerUrl;
+    if (broker.startsWith("mqtt://")) {
+        broker = broker.substring(7);
+    }
+    mqttClient.setServer(broker.c_str(), config.mqttPort);
+    mqttClient.setCallback(mqttCallback);
+    Serial.println("[INFO] MQTT client configured.");
+  } else {
+    Serial.println("[WARN] MQTT is disabled in the fetched configuration.");
+  }
 }
 
-// --- LOOP ---
 void loop() {
-  espServer.handleClient();
-
-  // Bluetooth removed — no Bluetooth command handling
-
-  // Periodic data upload
-  if (millis() - lastUploadTime >= UPLOAD_INTERVAL) {
-    lastUploadTime = millis();
-    sendDataToServer();
-    updatePinStatesFromServer();
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[WARN] WiFi disconnected. Rebooting to reconnect...");
+    delay(10000);
+    ESP.restart();
   }
 
-  // Periodic config fetch from server (every 5 minutes)
-  if (WiFi.isConnected() && millis() - lastConfigFetchTime >= CONFIG_FETCH_INTERVAL) {
-    lastConfigFetchTime = millis();
-    Serial.println("Periodic config fetch...");
-    fetchConfigFromServer();
+  if (!config.mqttEnabled) {
+    delay(5000); // If MQTT is off, just wait.
+    return;
+  }
+
+  if (!mqttClient.connected()) {
+    reconnectMqtt();
+  }
+  mqttClient.loop();
+
+  // Publish telemetry periodically
+  unsigned long now = millis();
+  if (mqttClient.connected() && (now - lastUploadTime >= (unsigned long)config.uploadIntervalSeconds * 1000)) {
+    lastUploadTime = now;
+    
+    const size_t capacity = 1024;
+    DynamicJsonDocument jsonDoc(capacity);
+
+    jsonDoc["ip"] = WiFi.localIP().toString();
+    jsonDoc["uptime_ms"] = millis();
+    jsonDoc["rssi_dbm"] = WiFi.RSSI();
+    jsonDoc["deviceName"] = config.deviceName;
+
+    float humidity_dht = dht.readHumidity();
+    if (!isnan(humidity_dht)) jsonDoc["humidity_dht_pct"] = humidity_dht;
+    float temperature_dht = dht.readTemperature();
+    if (!isnan(temperature_dht)) jsonDoc["temperature_dht_c"] = temperature_dht;
+
+    sensors_event_t humidity_aht, temp_aht;
+    if (aht.getEvent(&humidity_aht, &temp_aht)) {
+      jsonDoc["temperature_aht_c"] = temp_aht.temperature;
+      jsonDoc["humidity_aht_pct"] = humidity_aht.relative_humidity;
+    }
+
+    float lux = lightMeter.readLightLevel();
+    if (lux >= 0) jsonDoc["lux"] = lux;
+
+    long adcTotal = 0;
+    for (int i = 0; i < 10; i++) { adcTotal += analogRead(ADC_PIN); delay(2); }
+    jsonDoc["battery_v"] = (adcTotal / 10.0) / 1023.0 * VOLTAGE_DIVIDER_RATIO;
+    
+    String jsonString;
+    serializeJson(jsonDoc, jsonString);
+    String telemetryTopic = config.mqttBaseTopic + "/telemetry";
+    
+    Serial.printf("[MQTT] Publishing to %s\n", telemetryTopic.c_str());
+    mqttClient.publish(telemetryTopic.c_str(), jsonString.c_str());
+  }
+}
+
+/**
+ * @brief Handles incoming MQTT messages.
+ */
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String topicStr = String(topic);
+  Serial.printf("[MQTT] Message arrived on topic: %s\n", topicStr.c_str());
+
+  char message[length + 1];
+  memcpy(message, payload, length);
+  message[length] = '\0';
+  
+  const size_t capacity = 1024;
+  DynamicJsonDocument doc(capacity);
+  DeserializationError error = deserializeJson(doc, message);
+  if (error) {
+    Serial.printf("[ERROR] Failed to parse JSON payload: %s\n", error.c_str());
+    return;
+  }
+
+  // --- Topic for Pin Control ---
+  if (topicStr == config.mqttBaseTopic + "/control/pins") {
+    int pin = doc["pin"];
+    int state = doc["state"];
+    Serial.printf("  [CONTROL] Setting pin %d to state %d\n", pin, state);
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, state);
+  }
+  
+  // --- Topic for Configuration Updates ---
+  else if (topicStr == config.mqttBaseTopic + "/control/config") {
+    Serial.println("  [CONFIG] Received configuration update.");
+    if (doc.containsKey("uploadIntervalSeconds")) {
+      config.uploadIntervalSeconds = doc["uploadIntervalSeconds"];
+      Serial.printf("    - uploadIntervalSeconds set to: %d\n", config.uploadIntervalSeconds);
+    }
+    if (doc.containsKey("deviceName")) {
+      config.deviceName = doc["deviceName"].as<String>();
+      Serial.printf("    - deviceName set to: %s\n", config.deviceName.c_str());
+    }
+  }
+}
+
+/**
+ * @brief Connects/reconnects to the MQTT broker.
+ */
+void reconnectMqtt() {
+  unsigned long now = millis();
+  if (now - lastMqttReconnectAttempt < 5000) {
+    return;
+  }
+  lastMqttReconnectAttempt = now;
+
+  Serial.print("[MQTT] Attempting to connect to broker... ");
+  String clientId = "ESP8266-" + String(ESP.getChipId(), HEX);
+  
+  if (mqttClient.connect(clientId.c_str(), config.mqttUsername.c_str(), config.mqttPassword.c_str())) {
+    Serial.println("connected!");
+    
+    String pinControlTopic = config.mqttBaseTopic + "/control/pins";
+    String configControlTopic = config.mqttBaseTopic + "/control/config";
+    
+    mqttClient.subscribe(pinControlTopic.c_str());
+    mqttClient.subscribe(configControlTopic.c_str());
+    
+    Serial.printf("  Subscribed to: %s\n", pinControlTopic.c_str());
+    Serial.printf("  Subscribed to: %s\n", configControlTopic.c_str());
+    
+  } else {
+    Serial.print("failed, rc=");
+    Serial.print(mqttClient.state());
+    Serial.println(" try again in 5 seconds");
+  }
+}
+
+#include <WiFiClientSecure.h> // Required for HTTPS
+
+/**
+ * @brief Fetches the initial device configuration via HTTP from the server.
+ */
+void fetchInitialConfig() {
+  Serial.println("[HTTP] Fetching initial configuration from public server...");
+  
+  String configUrl = "https://api-esp-tnww.onrender.com/api/config"; 
+  
+  // Use WiFiClientSecure for HTTPS
+  // BearSSL::WiFiClientSecure clientSecure; // More explicit for clarity
+  std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure());
+
+  // Allow insecure connections (don't validate certificate)
+  client->setInsecure(); 
+  
+  HTTPClient http;
+  
+  Serial.printf("Connecting to %s\n", configUrl.c_str());
+  if (http.begin(*client, configUrl)) {
+    int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK) {
+      String payload = http.getString();
+      Serial.println("[HTTP] Config received successfully.");
+
+      const size_t capacity = JSON_OBJECT_SIZE(20) + 1024;
+      DynamicJsonDocument doc(capacity);
+      DeserializationError error = deserializeJson(doc, payload);
+
+      if (!error) {
+        config.uploadIntervalSeconds = doc["uploadIntervalSeconds"] | 30;
+        config.deviceName = doc["deviceName"] | "esp_default";
+
+        if (doc.containsKey("mqtt")) {
+            JsonObject mqttConfig = doc["mqtt"];
+            config.mqttEnabled = mqttConfig["enabled"] | false;
+            config.mqttBrokerUrl = mqttConfig["brokerUrl"].as<String>();
+            config.mqttPort = mqttConfig["port"] | 1883;
+            config.mqttUsername = mqttConfig["username"].as<String>();
+            config.mqttPassword = mqttConfig["password"].as<String>();
+            config.mqttBaseTopic = mqttConfig["baseTopic"].as<String>();
+        }
+
+        // --- DEBUG OVERRIDE ---
+        // Forcing MQTT to be enabled because the remote configuration has it disabled.
+        // This allows the device to proceed with MQTT operations.
+        config.mqttEnabled = true;
+
+        Serial.println("[INFO] Configuration parsed and applied.");
+      } else {
+        Serial.println("[ERROR] Failed to parse config JSON.");
+      }
+    } else {
+      Serial.printf("[ERROR] HTTP GET failed, code: %d, Message: %s\n", httpCode, http.errorToString(httpCode).c_str());
+    }
+    http.end();
+  } else {
+    Serial.println("[ERROR] HTTP begin failed.");
   }
 }

@@ -86,6 +86,38 @@
                         </form>
                     </div>
                 </div>
+
+                <div class="content-div card" style="margin-top: 2rem;">
+                    <div class="card-body">
+                        <h2 class="card-title">MQTT Налаштування</h2>
+                        <form id="mqttForm">
+                             <div class="form-switch sensor-item">
+                                <input type="checkbox" id="mqttEnabled" name="mqttEnabled">
+                                <label for="mqttEnabled">Увімкнути MQTT</label>
+                            </div>
+                            <div class="form-group sensor-item">
+                                <label for="mqttBrokerUrl">URL брокера</label>
+                                <input type="text" class="form-control" id="mqttBrokerUrl" placeholder="mqtt://test.mosquitto.org">
+                            </div>
+                            <div class="form-group sensor-item">
+                                <label for="mqttUsername">Ім'я користувача</label>
+                                <input type="text" class="form-control" id="mqttUsername" placeholder="(необов'язково)">
+                            </div>
+                            <div class="form-group sensor-item">
+                                <label for="mqttPassword">Пароль</label>
+                                <input type="password" class="form-control" id="mqttPassword" placeholder="(необов'язково)">
+                            </div>
+                             <div class="form-group sensor-item">
+                                <label for="mqttBaseTopic">Базовий топік</label>
+                                <input type="text" class="form-control" id="mqttBaseTopic" placeholder="esp_device">
+                            </div>
+                            <div style="margin-top:12px; display:flex; gap:8px;">
+                                <button type="submit" class="btn success"><i data-lucide="save" style="margin-right:6px"></i></button>
+                                <button type="reset" class="btn warning"><i data-lucide="refresh-ccw" style="margin-right:6px"></i></button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </aside>
         </div>
     </div>
