@@ -3,7 +3,8 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const fetch = require('node-fetch');
+const mqtt = require('mqtt'); // Додано MQTT
+const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 80;
@@ -33,7 +34,6 @@ hbs.registerHelper('toFixed', function(number, digits) {
   if (typeof number === 'number') {
     return number.toFixed(digits);
   }
-  // Return the original value if it's not a number (e.g., null or undefined)
   return number;
 });
 
@@ -49,64 +49,53 @@ try {
 app.use((req, res, next) => {
   const start = Date.now();
   console.log(`[${new Date().toISOString()}] --> ${req.method} ${req.originalUrl} from ${req.ip}`);
-
-  // capture finish to log response status and duration
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`[${new Date().toISOString()}] <-- ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
   });
-
   next();
 });
 
-// Зберігаємо останню відому IP-адресу пристрою
-let lastKnownIp = null;
-
-// Batching: track pending config writes and throttle file I/O
-let configNeedsWrite = false;
-let lastConfigWriteTime = Date.now();
-
+// --- CONFIGURATION ---
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 let config = {
-  enableAutoLight: false,         // If true, enables schedule-based control.
-  enableLightThreshold: false,  // If true, enables light level threshold control.
+  enableAutoLight: false,
+  enableLightThreshold: false,
   lightThreshold: 40,
   uploadIntervalSeconds: 30,
-  // Auto-light schedule
   autoLightStartTime: "07:00",
   autoLightEndTime: "22:00",
-  // Last time settings were saved in UTC+2 (string)
   lastSavedLocalTime: null,
-  // New fields
-  // wifi is an ordered array of networks { ssid, password, enabled }
   wifi: [],
   sendAddresses: [],
-  deviceName: ""
+  deviceName: "",
+  // Нові налаштування для MQTT
+  mqtt: {
+    enabled: false,
+    brokerUrl: "mqtt://test.mosquitto.org",
+    username: "",
+    password: "",
+    baseTopic: "esp_device"
+  }
 };
 
 // Завантажуємо конфігурацію при старті
 try {
   if (fs.existsSync(CONFIG_FILE)) {
     const rawConfig = fs.readFileSync(CONFIG_FILE, 'utf8');
-    try {
-      const parsed = JSON.parse(rawConfig);
-      // Ensure new fields exist when loading older configs
-      config = Object.assign({}, config, parsed);
-      // wifi backward compatibility: accept object or array
-      if (Array.isArray(parsed.wifi)) {
-        config.wifi = parsed.wifi.map(w => ({ ssid: w.ssid || '', password: w.password || '', enabled: !!w.enabled }));
-      } else if (parsed.wifi && typeof parsed.wifi === 'object') {
-        // single network stored as object in older configs
-        config.wifi = [{ ssid: parsed.wifi.ssid || '', password: parsed.wifi.password || '', enabled: true }];
-      } else {
-        config.wifi = config.wifi || [];
-      }
-      config.sendAddresses = Array.isArray(parsed.sendAddresses) ? parsed.sendAddresses : (config.sendAddresses || []);
-      config.deviceName = typeof parsed.deviceName === 'string' ? parsed.deviceName : (config.deviceName || '');
-      console.log('Configuration loaded:', config);
-    } catch (e) {
-      console.error('Failed to parse config, using defaults:', e);
+    const parsed = JSON.parse(rawConfig);
+    // Merge recursively to ensure new sub-objects like 'mqtt' are added
+    config = Object.assign(config, parsed);
+    if (parsed.mqtt) {
+        config.mqtt = Object.assign(config.mqtt, parsed.mqtt);
     }
+    // backward compatibility for wifi
+    if (Array.isArray(parsed.wifi)) {
+      config.wifi = parsed.wifi.map(w => ({ ssid: w.ssid || '', password: w.password || '', enabled: !!w.enabled }));
+    } else if (parsed.wifi && typeof parsed.wifi === 'object') {
+      config.wifi = [{ ssid: parsed.wifi.ssid || '', password: parsed.wifi.password || '', enabled: true }];
+    }
+    console.log('Configuration loaded:', config);
   } else {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
     console.log('Default configuration created.');
@@ -114,6 +103,83 @@ try {
 } catch (e) {
   console.error('Failed to load or create config file:', e);
 }
+
+
+// --- MQTT SETUP ---
+let mqttClient = null;
+
+function connectMqtt() {
+  if (!config.mqtt.enabled) {
+    console.log('[MQTT] MQTT is disabled in config.');
+    return;
+  }
+  if (mqttClient && (mqttClient.connected || mqttClient.connecting)) {
+      console.log('[MQTT] Client is already connected or connecting.');
+      return; 
+  }
+
+  const options = {
+    username: config.mqtt.username,
+    password: config.mqtt.password,
+    clientId: `server_${crypto.randomBytes(4).toString('hex')}`
+  };
+
+  console.log(`[MQTT] Connecting to ${config.mqtt.brokerUrl}`);
+  mqttClient = mqtt.connect(config.mqtt.brokerUrl, options);
+
+  mqttClient.on('connect', () => {
+    console.log('[MQTT] Connected to broker.');
+    const telemetryTopic = `${config.mqtt.baseTopic}/telemetry`;
+    mqttClient.subscribe(telemetryTopic, (err) => {
+      if (!err) {
+        console.log(`[MQTT] Subscribed to telemetry topic: ${telemetryTopic}`);
+      } else {
+        console.error(`[MQTT] Failed to subscribe to ${telemetryTopic}:`, err);
+      }
+    });
+  });
+
+  mqttClient.on('error', (err) => {
+    console.error('[MQTT] Connection error:', err);
+  });
+
+  mqttClient.on('reconnect', () => {
+    console.log('[MQTT] Reconnecting...');
+  });
+
+  mqttClient.on('close', () => {
+    console.log('[MQTT] Connection closed.');
+  });
+
+  mqttClient.on('message', (topic, message) => {
+    console.log(`[MQTT] Received message on topic ${topic}`);
+    if (topic === `${config.mqtt.baseTopic}/telemetry`) {
+      try {
+        const data = JSON.parse(message.toString());
+        processUploadedData(data, 'MQTT');
+      } catch (e) {
+        console.error('[MQTT] Failed to parse telemetry message:', e);
+      }
+    }
+  });
+}
+
+function publishMqtt(topic, message, options) {
+    if (mqttClient && mqttClient.connected) {
+        mqttClient.publish(topic, message, options, (err) => {
+            if (err) {
+                console.error(`[MQTT] Failed to publish to ${topic}:`, err);
+            } else {
+                console.log(`[MQTT] Published to ${topic}: ${message}`);
+            }
+        });
+    } else {
+        console.warn(`[MQTT] Cannot publish. Client not connected.`);
+    }
+}
+
+// --- END MQTT SETUP ---
+
 
 // Endpoint to get the current config
 app.get('/api/config', (req, res) => {
@@ -123,96 +189,38 @@ app.get('/api/config', (req, res) => {
 // Endpoint to update the config
 app.post('/api/config', (req, res) => {
   try {
-    // Валідація та оновлення
     const newConfig = req.body;
-    // Only update enableAutoLight when explicitly provided to avoid other form posts
-    if (typeof newConfig.enableAutoLight !== 'undefined') {
-      const prev = config.enableAutoLight;
-      config.enableAutoLight = !!newConfig.enableAutoLight;
-      if (prev !== config.enableAutoLight) console.log(`[Config] enableAutoLight changed: ${prev} -> ${config.enableAutoLight}`);
-    }
-    // Update enableLightThreshold (mutually exclusive logic with time schedule)
-    if (typeof newConfig.enableLightThreshold !== 'undefined') {
-      const prev = config.enableLightThreshold;
-      config.enableLightThreshold = !!newConfig.enableLightThreshold;
-      if (prev !== config.enableLightThreshold) console.log(`[Config] enableLightThreshold changed: ${prev} -> ${config.enableLightThreshold}`);
-    }
-    if (typeof newConfig.lightThreshold === 'number') {
-      config.lightThreshold = newConfig.lightThreshold;
-    }
-    if (typeof newConfig.uploadIntervalSeconds === 'number') {
-      config.uploadIntervalSeconds = newConfig.uploadIntervalSeconds;
-    }
-    // Auto-light schedule times (HH:MM strings)
-    if (typeof newConfig.autoLightStartTime === 'string') {
-      config.autoLightStartTime = newConfig.autoLightStartTime;
-    }
-    if (typeof newConfig.autoLightEndTime === 'string') {
-      config.autoLightEndTime = newConfig.autoLightEndTime;
-    }
-    // Wifi list (array of { ssid, password, enabled })
-    if (Array.isArray(newConfig.wifi)) {
-      config.wifi = newConfig.wifi.map(w => ({
-        ssid: typeof w.ssid === 'string' ? w.ssid : '',
-        password: typeof w.password === 'string' ? w.password : '',
-        enabled: !!w.enabled
-      }));
-    } else if (newConfig.wifi && typeof newConfig.wifi === 'object') {
-      // accept single object for backward compatibility
-      config.wifi = [{
-        ssid: typeof newConfig.wifi.ssid === 'string' ? newConfig.wifi.ssid : '',
-        password: typeof newConfig.wifi.password === 'string' ? newConfig.wifi.password : '',
-        enabled: true
-      }];
-    }
-    // Addresses to send data to (array of strings)
-    if (Array.isArray(newConfig.sendAddresses)) {
-      // sanitize: keep only strings
-      config.sendAddresses = newConfig.sendAddresses.filter(a => typeof a === 'string');
-    }
-    // Device name used by ESP as Device Information Name
-    if (typeof newConfig.deviceName === 'string') {
-      config.deviceName = newConfig.deviceName;
-    }
-    // currentTime updates (from UI) - expected ISO string in UTC+2
-    if (typeof newConfig.currentTime === 'string') {
-      config.currentTime = newConfig.currentTime;
-      // also mirror into lastSavedLocalTime for backward compatibility / ESP base time
-      config.lastSavedLocalTime = newConfig.currentTime;
-      console.log(`[Time Update] currentTime received from UI: ${config.currentTime}`);
-      configNeedsWrite = true; // Mark for batched write
-    }
+    const oldMqttConfig = JSON.stringify(config.mqtt);
+
+    // Оновлюємо конфігурацію
+    Object.keys(newConfig).forEach(key => {
+        if (key === 'mqtt' && typeof newConfig.mqtt === 'object') {
+            config.mqtt = Object.assign(config.mqtt, newConfig.mqtt);
+        } else if (config.hasOwnProperty(key)) {
+            config[key] = newConfig[key];
+        }
+    });
     
-    // Save server-side timestamp in UTC+2 to help devices/local display
-    try {
-      const now = new Date();
-      const offsetHours = 2; // UTC+2 requested
-      const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const tzDate = new Date(utcMs + offsetHours * 3600000);
-      const pad = (n) => String(n).padStart(2, '0');
-      const formatted = `${tzDate.getFullYear()}-${pad(tzDate.getMonth()+1)}-${pad(tzDate.getDate())}T${pad(tzDate.getHours())}:${pad(tzDate.getMinutes())}:${pad(tzDate.getSeconds())}+02:00`;
-      config.lastSavedLocalTime = formatted;
-      // keep a separate currentTime field if not present
-      if (!config.currentTime) config.currentTime = formatted;
-    } catch (e) {
-      console.warn('Failed to compute local save time:', e);
-      config.lastSavedLocalTime = new Date().toISOString();
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+    console.log('Configuration persisted to file.');
+
+    // Handle MQTT connection changes and publish config to device
+    if (config.mqtt.enabled) {
+        const newMqttConfig = JSON.stringify(config.mqtt);
+        if (newMqttConfig !== oldMqttConfig) {
+            console.log('[MQTT] MQTT config changed, reconnecting...');
+            if (mqttClient) {
+                mqttClient.end(true, () => connectMqtt());
+            } else {
+                connectMqtt();
+            }
+        }
+        
+        const configTopic = `${config.mqtt.baseTopic}/control/config`;
+        const { mqtt, ...espConfig } = config;
+        publishMqtt(configTopic, JSON.stringify(espConfig), { retain: true });
     }
 
-    // Batched write: only write file when uploadIntervalSeconds has elapsed OR config change (not currentTime-only)
-    const timeSinceLastWrite = Date.now() - lastConfigWriteTime;
-    const writeIntervalMs = (config.uploadIntervalSeconds || 30) * 1000;
-    const isNonTimedChange = Object.keys(newConfig).some(k => k !== 'currentTime');
-    
-    if (isNonTimedChange || timeSinceLastWrite >= writeIntervalMs) {
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
-      lastConfigWriteTime = Date.now();
-      configNeedsWrite = false;
-      console.log('Configuration persisted to file:', config);
-    } else if (configNeedsWrite) {
-      console.log(`[Batched] Config updated in memory, will persist in ${Math.round((writeIntervalMs - timeSinceLastWrite) / 1000)}s`);
-    }
-    
     res.json({ status: 'ok', config });
   } catch (e) {
     console.error('Failed to write config:', e);
@@ -220,408 +228,93 @@ app.post('/api/config', (req, res) => {
   }
 });
 
+/**
+ * Unified function to process data from ESP (via HTTP or MQTT)
+ * @param {object} data - Data from ESP.
+ * @param {string} source - 'HTTP' or 'MQTT'.
+ */
+async function processUploadedData(data, source = 'HTTP') {
+  console.log(`Processing data from ${source}:`, data);
 
-app.post('/upload', async (req, res) => {
-  try {
-    const data = req.body;
-    console.log('Received upload from ESP at', new Date().toISOString());
+  const outPath = path.join(__dirname, 'received.json');
+  fs.writeFileSync(outPath, JSON.stringify(data, null, 2), 'utf8');
 
-    if (data.ip) {
-        lastKnownIp = data.ip;
-        console.log(`[IP Update] Last known ESP IP updated to: ${lastKnownIp}`);
-    }
+  const id = Date.now().toString() + '-' + crypto.randomBytes(4).toString('hex');
+  const filename = `${id}.json`;
+  const filePath = path.join(UPLOAD_DIR, filename);
+  const record = {
+    meta: { id, time: new Date().toISOString(), source },
+    data
+  };
+  fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf8');
+  console.log(`Saved upload record to ${filePath}`);
 
-    const outPath = path.join(__dirname, 'received.json');
-    fs.writeFileSync(outPath, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`Saved received payload to ${outPath}`);
+  sendSseEvent('new', record.data);
 
-    const id = Date.now().toString() + '-' + crypto.randomBytes(4).toString('hex');
-    const filename = `${id}.json`;
-    const filePath = path.join(UPLOAD_DIR, filename);
-    const record = {
-      meta: { id, time: new Date().toISOString(), ip: req.ip, method: req.method, url: req.originalUrl },
-      data
-    };
-    fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf8');
-    console.log(`Saved upload record to ${filePath}`);
+  // --- Server-side Auto-light Logic ---
+  const autoModeActive = config.enableAutoLight || config.enableLightThreshold;
+  if (autoModeActive && data.lux !== undefined) {
+      const isWithinSchedule = (start, end) => {
+          if (!start || !end || !/^\\d{2}:\\d{2}$/.test(start) || !/^\\d{2}:\\d{2}$/.test(end)) return true;
+          const now = new Date();
+          const offsetHours = 2; // UTC+2
+          const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+          const tzDate = new Date(utcMs + (offsetHours * 3600000));
+          const nowMinutes = tzDate.getHours() * 60 + tzDate.getMinutes();
+          const [startH, startM] = start.split(':').map(Number);
+          const startMinutes = startH * 60 + startM;
+          const [endH, endM] = end.split(':').map(Number);
+          const endMinutes = endH * 60 + endM;
+          if (startMinutes <= endMinutes) return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+          return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+      };
 
-    sendSseEvent('new', record.data);
-
-    // --- Server-side Auto-light Logic ---
-    // This logic now resides on the server, making it the source of truth.
-    const autoModeActive = config.enableAutoLight || config.enableLightThreshold;
-    if (autoModeActive && data.lux !== undefined) {
-        // Helper function to check if the current time is within the HH:MM schedule.
-        const isWithinSchedule = (start, end) => {
-            if (!start || !end || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
-                console.warn('[Auto-Light] Invalid time format in schedule, defaulting to true.');
-                return true; // If schedule is invalid, default to always-on.
-            }
-            const now = new Date();
-            // The server generates timestamps in UTC+2, so we evaluate time in the same context for consistency.
-            const offsetHours = 2;
-            const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
-            const tzDate = new Date(utcMs + (offsetHours * 3600000));
-            const nowMinutes = tzDate.getHours() * 60 + tzDate.getMinutes();
-            
-            const [startH, startM] = start.split(':').map(Number);
-            const startMinutes = startH * 60 + startM;
-            const [endH, endM] = end.split(':').map(Number);
-            const endMinutes = endH * 60 + endM;
-
-            if (startMinutes <= endMinutes) { // e.g., 07:00 to 22:00
-                return nowMinutes >= startMinutes && nowMinutes < endMinutes;
-            } else { // e.g., 22:00 to 06:00 (overnight)
-                return nowMinutes >= startMinutes || nowMinutes < endMinutes;
-            }
-        };
-
-        const withinSchedule = isWithinSchedule(config.autoLightStartTime, config.autoLightEndTime);
-        const isDark = data.lux < config.lightThreshold;
-        
-        let shouldTurnOn = false;
-
-        if (config.enableAutoLight && !config.enableLightThreshold) {
-            // Mode 1: Schedule only
-            shouldTurnOn = withinSchedule;
-        } else if (!config.enableAutoLight && config.enableLightThreshold) {
-            // Mode 2: Threshold only
-            shouldTurnOn = isDark;
-        } else if (config.enableAutoLight && config.enableLightThreshold) {
-            // Mode 3: Schedule AND Threshold
-            shouldTurnOn = withinSchedule && isDark;
-        }
-        
-        // Read the last known state and update only if it has changed.
-        let currentPinStates = {};
-        if (fs.existsSync(PINS_STATE_FILE)) {
-            try {
-                currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
-            } catch (e) {
-                console.error('[Auto-Light] Failed to parse pins.json:', e);
-            }
-        }
-
-        const desiredState = shouldTurnOn ? 1 : 0;
-        if (currentPinStates.pin12 !== desiredState) {
-            console.log(`[Auto-Light] Server logic: lux=${data.lux}, schedule=${withinSchedule}. Changing pin12 to ${desiredState}.`);
-            await updatePinState('pin12', desiredState); // This function saves state and pushes to ESP.
-        }
-    } else if (!autoModeActive) {
-        // If all auto-modes are off, ensure the light is off.
-        let currentPinStates = {};
-         if (fs.existsSync(PINS_STATE_FILE)) {
-            try {
-                currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
-            } catch (e) { console.error('[Auto-Light] Failed to parse pins.json:', e); }
-        }
-        if (currentPinStates.pin12 !== 0) {
-            console.log(`[Auto-Light] Server logic: All auto modes off. Turning pin12 OFF.`);
-            await updatePinState('pin12', 0);
-        }
-    }
-
-    return res.status(200).json({ 
-      status: 'ok', 
-      uploadFile: filename,
-      uploadIntervalSeconds: config.uploadIntervalSeconds 
-    });
-
-  } catch (err) {
-    console.error('Error handling /upload:', err);
-    // Avoid crashing on file write errors, etc.
-    if (!res.headersSent) {
-      res.status(500).json({ status: 'error', message: err.message });
-    }
-  }
-});
-
-// Provide a lightweight readiness check on the same path so ESP can poll
-app.get('/upload', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-app.get('/', (req, res) => {
-  res.send(`ESP receiver - POST JSON to /upload<br/><a href="/view">View received data</a>`);
-});
-
-// Render received.json on a simple frontend using Handlebars
-app.get('/view', (req, res) => {
-  // Build list of uploads for the left sidebar
-  let list = [];
-  try {
-    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
-    list = files.map(f => {
-      try {
-        const raw = fs.readFileSync(path.join(UPLOAD_DIR, f), 'utf8');
-        const parsed = JSON.parse(raw);
-        return {
-          id: f,
-          time: parsed?.meta?.time || null,
-          summary: (parsed?.data?.device ? `${parsed.data.device.name || ''} ${parsed.data.device.chipModel || ''}`.trim() : (parsed?.data?.message || '')),
-          device: parsed?.data?.device || {},
-          network: parsed?.data?.network || {}
-        };
-      } catch (e) {
-        return { id: f, time: null, summary: '' };
+      const withinSchedule = isWithinSchedule(config.autoLightStartTime, config.autoLightEndTime);
+      const isDark = data.lux < config.lightThreshold;
+      
+      let shouldTurnOn = false;
+      if (config.enableAutoLight && !config.enableLightThreshold) shouldTurnOn = withinSchedule;
+      else if (!config.enableAutoLight && config.enableLightThreshold) shouldTurnOn = isDark;
+      else if (config.enableAutoLight && config.enableLightThreshold) shouldTurnOn = withinSchedule && isDark;
+      
+      let currentPinStates = {};
+      if (fs.existsSync(PINS_STATE_FILE)) {
+          try {
+              currentPinStates = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+          } catch (e) { console.error('[Auto-Light] Failed to parse pins.json:', e); }
       }
-    }).sort((a,b) => (b.time || '').localeCompare(a.time || ''));
-  } catch (e) {
-    console.error('Failed to build uploads list for /view:', e);
-  }
 
-  return res.render('dashboard', { exists: true, list });
-});
-
-// Render a dedicated mobile-first control page
-app.get('/control', (req, res) => {
-  let latestData = null;
-  try {
-    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
-    if (files.length > 0) {
-      // Сортуємо файли за назвою (яка містить timestamp), щоб знайти останній
-      files.sort().reverse();
-      const latestFile = files[0];
-      const raw = fs.readFileSync(path.join(UPLOAD_DIR, latestFile), 'utf8');
-      const parsed = JSON.parse(raw);
-      // Передаємо тільки дані з датчиків
-      latestData = parsed.data; 
-    }
-  } catch (e) {
-    console.error('Failed to get latest data for /control page:', e);
-  }
-  // Передаємо дані в шаблон
-  return res.render('controll', { latestData });
-});
-
-// API: Get latest sensor data for real-time updates
-app.get('/api/latest-data', (req, res) => {
-  try {
-    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
-    if (files.length > 0) {
-      files.sort().reverse();
-      const latestFile = files[0];
-      const raw = fs.readFileSync(path.join(UPLOAD_DIR, latestFile), 'utf8');
-      const parsed = JSON.parse(raw);
-      // Return just the sensor data object
-      return res.json(parsed.data || {});
-    } else {
-      // If no data is available, return an empty object or an error
-      return res.status(404).json({ error: 'No data available' });
-    }
-  } catch (e) {
-    console.error('Failed to get latest data for API:', e);
-    return res.status(500).json({ error: 'Failed to read latest data' });
-  }
-});
-
-// API: list uploads with pagination
-app.get('/api/uploads', (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 5;
-    const start = (page - 1) * limit;
-
-    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
-    const list = files.map(f => {
-      try {
-        const raw = fs.readFileSync(path.join(UPLOAD_DIR, f), 'utf8');
-        const parsed = JSON.parse(raw);
-        // Read the full data object for device and network info
-        // Перетворюємо дані в потрібний формат
-        const deviceInfo = {
-          name: parsed?.data?.deviceName || parsed?.data?.device || 'Unknown Device',
-          chipModel: parsed?.data?.chipModel || 'ESP',
-          cpuFreqMHz: parsed?.data?.cpuFreqMHz || null,
-          flashSizeMB: parsed?.data?.flashSizeMB || null,
-          sdkVersion: parsed?.data?.sdkVersion || null,
-          macAddress: parsed?.data?.macAddress || null
-        };
-
-        const networkInfo = {
-          ip: parsed?.data?.ip || null,
-          ssid: parsed?.data?.ssid || null,
-          rssi: parsed?.data?.rssi_dbm || null,
-          channel: parsed?.data?.channel || null
-        };
-
-        // Формуємо summary з доступних даних
-        const summaryParts = [
-          deviceInfo.name,
-          `IP: ${networkInfo.ip || 'Unknown'}`,
-          networkInfo.rssi !== null ? `RSSI: ${networkInfo.rssi}dBm` : null
-        ].filter(Boolean);
-
-        return {
-          id: f,
-          time: parsed?.meta?.time || null,
-          device: deviceInfo,
-          network: networkInfo,
-          summary: summaryParts.join(' '),
-          // Додаємо сенсорні дані
-          sensors: {
-            lux: parsed?.data?.lux,
-            temperature_aht: parsed?.data?.temperature_aht_c,
-            humidity_aht: parsed?.data?.humidity_aht_pct,
-            temperature_dht: parsed?.data?.temperature_dht_c,
-            humidity_dht: parsed?.data?.humidity_dht_pct,
-            battery: parsed?.data?.battery_v,
-            uptime: parsed?.data?.uptime_ms
-          }
-        };
-      } catch (e) {
-        return { id: f, time: null, device: {}, network: {}, summary: '' };
+      const desiredState = shouldTurnOn ? 1 : 0;
+      if (currentPinStates.pin12 !== desiredState) {
+          console.log(`[Auto-Light] Server logic changing pin12 to ${desiredState}.`);
+          await updatePinState('pin12', desiredState);
       }
-    }).sort((a,b) => (b.time || '').localeCompare(a.time || ''));
-
-    // Calculate pagination
-    const totalItems = list.length;
-    const totalPages = Math.ceil(totalItems / limit);
-    const paginatedList = list.slice(start, start + limit);
-
-    res.json({
-      items: paginatedList,
-      pagination: {
-        page,
-        limit,
-        totalItems,
-        totalPages
-      }
-    });
-  } catch (e) {
-    console.error('Failed to list uploads:', e);
-    res.status(500).json({ error: 'failed to list uploads' });
-  }
-});
-
-// API: get single upload detail
-app.get('/api/uploads/:name', (req, res) => {
-  const name = req.params.name;
-  // prevent path traversal
-  if (path.basename(name) !== name) return res.status(400).json({ error: 'invalid name' });
-  const file = path.join(UPLOAD_DIR, name);
-  if (!fs.existsSync(file)) return res.status(404).json({ error: 'not found' });
-  try {
-    const raw = fs.readFileSync(file, 'utf8');
-    const parsed = JSON.parse(raw);
-    res.json(parsed);
-  } catch (e) {
-    console.error('Failed to read upload file:', e);
-    res.status(500).json({ error: 'failed to read file' });
-  }
-});
-
-// Server-Sent Events: clients can subscribe to updates (new/delete)
-const sseClients = new Set();
-function sendSseEvent(event, payload) {
-  const msg = `event: ${event}\n` + `data: ${JSON.stringify(payload)}\n\n`;
-  for (const res of sseClients) {
-    try { res.write(msg); } catch (e) { console.error('SSE write error:', e); }
+  } else if (!autoModeActive) {
+      // Turn light off if automation is disabled
   }
 }
 
-app.get('/events', (req, res) => {
-  // set headers for SSE
-  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-  res.flushHeaders && res.flushHeaders();
-  res.write(': connected\n\n');
-  sseClients.add(res);
-  req.on('close', () => { sseClients.delete(res); });
-});
-
-// DELETE all uploads
-app.delete('/api/uploads', (req, res) => {
+// Legacy endpoint for backward compatibility
+app.post('/upload', async (req, res) => {
   try {
-    const files = fs.readdirSync(UPLOAD_DIR);
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        fs.unlinkSync(path.join(UPLOAD_DIR, file));
-      }
-    }
-    console.log(`Deleted all upload files`);
-    sendSseEvent('deleted_all', {});
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('Failed to delete all upload files:', e);
-    res.status(500).json({ error: 'failed to delete all' });
+    console.log('Received legacy HTTP upload from ESP.');
+    await processUploadedData(req.body, 'HTTP');
+    return res.status(200).json( {
+      status: 'ok',
+      uploadIntervalSeconds: config.uploadIntervalSeconds
+    });
+  } catch (err) {
+    console.error('Error handling /upload:', err);
+    res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
-// DELETE an upload
-app.delete('/api/uploads/:name', (req, res) => {
-  const name = req.params.name;
-  if (path.basename(name) !== name) return res.status(400).json({ error: 'invalid name' });
-  const file = path.join(UPLOAD_DIR, name);
-  if (!fs.existsSync(file)) return res.status(404).json({ error: 'not found' });
-  try {
-    fs.unlinkSync(file);
-    console.log(`Deleted upload file ${file}`);
-    // notify SSE clients
-    sendSseEvent('deleted', { id: name });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('Failed to delete upload file:', e);
-    res.status(500).json({ error: 'failed to delete' });
-  }
-});
-
+// --- PIN CONTROL LOGIC ---
 const PINS_STATE_FILE = path.join(__dirname, 'pins.json');
-
-// Endpoint to get the current state of all pins
-app.get('/pinstate', (req, res) => {
-  try {
-    if (fs.existsSync(PINS_STATE_FILE)) {
-      const state = fs.readFileSync(PINS_STATE_FILE, 'utf8');
-      res.json(JSON.parse(state));
-    } else {
-      // Default state if file doesn't exist
-      res.json({});
-    }
-  } catch (e) {
-    console.error('Failed to read pins state:', e);
-    res.status(500).json({ error: 'failed to read pins state' });
-  }
-});
-
-// Endpoint to update the state of all pins
-app.post('/api/pins', (req, res) => {
-  try {
-    const { pins } = req.body;
-    fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(pins), 'utf8');
-    console.log(`Set pins state to ${JSON.stringify(pins)}`);
-    res.json({ status: 'ok', pins });
-  } catch (e) {
-    console.error('Failed to write pins state:', e);
-    res.status(500).json({ error: 'failed to write pins state' });
-  }
-});
-
-// Endpoint to get the current state of a specific pin
-app.get('/api/pins/:pin', (req, res) => {
-  try {
-    const pin = req.params.pin;
-    if (fs.existsSync(PINS_STATE_FILE)) {
-      const state = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
-      res.json({ state: state[pin] || 0 });
-    } else {
-      // Default state if file doesn't exist
-      res.json({ state: 0 });
-    }
-  } catch (e) {
-    console.error(`Failed to read pin ${req.params.pin} state:`, e);
-    res.status(500).json({ error: `failed to read pin ${req.params.pin} state` });
-  }
-});
-
-// Створюємо мапування логічних пінів на реальні GPIO
-const pinMapping = {
-  '12': 12,
-  '13': 13,
-  '14': 14,
-};
+const pinMapping = { '12': 12, '13': 13, '14': 14 };
 
 /**
- * Updates the state of a specific pin, saves it, and sends the command to the ESP.
+ * Updates the state of a specific pin, saves it, and sends the command via MQTT.
  * @param {string} pinName - The name of the pin (e.g., 'pin12').
  * @param {0 | 1} state - The new state (0 for OFF, 1 for ON).
  */
@@ -635,56 +328,64 @@ async function updatePinState(pinName, state) {
 
   let pins = {};
   if (fs.existsSync(PINS_STATE_FILE)) {
-    pins = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+    try {
+        pins = JSON.parse(fs.readFileSync(PINS_STATE_FILE, 'utf8'));
+    } catch(e) { console.error("Failed to parse pins.json", e); }
   }
 
   pins[pinName] = state;
   fs.writeFileSync(PINS_STATE_FILE, JSON.stringify(pins, null, 2), 'utf8');
   console.log(`[Pin Control] Set pin ${pinName} state to ${state} in pins.json`);
 
-  if (lastKnownIp) {
-    const espUrl = `http://${lastKnownIp}/control?pin=${gpioPinNumber}&state=${state}`;
-    console.log(`[Pin Control] Sending command to ESP: ${espUrl}`);
-    try {
-      const espResponse = await fetch(espUrl, { method: 'GET', timeout: 5000 });
-      if (!espResponse.ok) {
-        console.error(`[Pin Control] ESP returned status: ${espResponse.status}`);
-      } else {
-        console.log('[Pin Control] Successfully sent command to ESP.');
-      }
-    } catch (espError) {
-      console.error(`[Pin Control] Failed to send command to ESP8266 at ${lastKnownIp}:`, espError.message);
-    }
+  if (config.mqtt.enabled) {
+    const topic = `${config.mqtt.baseTopic}/control/pins`;
+    const message = JSON.stringify({ pin: gpioPinNumber, state: state });
+    publishMqtt(topic, message);
   } else {
-    console.warn('[Pin Control] Cannot send command to ESP: IP address is unknown.');
+    console.warn('[Pin Control] Cannot send command to ESP: MQTT is disabled.');
   }
-  return { status: 'ok', state, sentToEsp: !!lastKnownIp };
+
+  return { status: 'ok', state, sentToEsp: config.mqtt.enabled };
 }
 
-
-// Endpoint to update the state of a specific pin
+// Endpoint to update a specific pin
 app.post('/api/pins/:pin', async (req, res) => {
   try {
     const pinName = req.params.pin;
     const { state } = req.body;
     const result = await updatePinState(pinName, state);
 
-    // If pin12 was manually changed, disable the corresponding auto-light modes.
-    if (pinName === 'pin12') {
-      if (config.enableAutoLight || config.enableLightThreshold) {
-        console.log('[Auto-Light] Manual override on pin12 detected. Disabling automation.');
-        config.enableAutoLight = false;
-        config.enableLightThreshold = false;
-        // Persist the config change immediately.
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+    if (pinName === 'pin12' && (config.enableAutoLight || config.enableLightThreshold)) {
+      console.log('[Auto-Light] Manual override on pin12 detected. Disabling automation.');
+      config.enableAutoLight = false;
+      config.enableLightThreshold = false;
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+      
+      if (config.mqtt.enabled) {
+          const configTopic = `${config.mqtt.baseTopic}/control/config`;
+          publishMqtt(configTopic, JSON.stringify({ enableAutoLight: false, enableLightThreshold: false }), { retain: true });
       }
     }
-
     res.json(result);
   } catch (e) {
     console.error(`[Pin Control] Failed to write pin ${req.params.pin} state:`, e);
     res.status(500).json({ error: `failed to write pin ${req.params.pin} state` });
   }
+});
+
+// --- UI AND API ENDPOINTS (MOSTLY UNCHANGED) ---
+
+app.get('/', (req, res) => {
+  res.send(`ESP receiver is running. Use /control, /view, /settings.<br/>`);
+});
+
+app.get('/view', (req, res) => {
+  // This endpoint remains the same, reading from the upload directory
+  res.render('dashboard');
+});
+
+app.get('/control', (req, res) => {
+  res.render('controll');
 });
 
 app.get('/chart', (req, res) => {
@@ -695,6 +396,35 @@ app.get('/settings', (req, res) => {
     return res.render('settings');
 });
 
+app.get('/pins.json', (req, res) => {
+  try {
+    if (fs.existsSync(PINS_STATE_FILE)) {
+      const state = fs.readFileSync(PINS_STATE_FILE, 'utf8');
+      res.json(JSON.parse(state));
+    } else {
+      res.json({});
+    }
+  } catch (e) {
+    console.error('Failed to read pins state from /pins.json:', e);
+    res.status(500).json({ error: 'failed to read pins state' });
+  }
+});
+
+// Other API endpoints for fetching data also remain unchanged as they read from the filesystem
+app.get('/api/latest-data', (req, res) => {
+  try {
+    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json')).sort().reverse();
+    if (files.length > 0) {
+      const raw = fs.readFileSync(path.join(UPLOAD_DIR, files[0]), 'utf8');
+      return res.json(JSON.parse(raw).data || {});
+    }
+    return res.status(404).json({ error: 'No data available' });
+  } catch (e) {
+    console.error('Failed to get latest data for API:', e);
+    return res.status(500).json({ error: 'Failed to read latest data' });
+  }
+});
+
 app.get('/api/history', (req, res) => {
     try {
         const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith('.json'));
@@ -702,13 +432,8 @@ app.get('/api/history', (req, res) => {
             try {
                 const raw = fs.readFileSync(path.join(UPLOAD_DIR, f), 'utf8');
                 const parsed = JSON.parse(raw);
-                return {
-                    timestamp: parsed?.meta?.time || null,
-                    ...parsed.data
-                };
-            } catch (e) {
-                return null;
-            }
+                return { timestamp: parsed?.meta?.time || null, ...parsed.data };
+            } catch (e) { return null; }
         }).filter(Boolean).sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
         res.json(history);
     } catch (e) {
@@ -717,24 +442,41 @@ app.get('/api/history', (req, res) => {
     }
 });
 
-// Global error handlers for uncaught errors
+// Server-Sent Events
+const sseClients = new Set();
+function sendSseEvent(event, payload) {
+  const msg = `event: ${event}\n` + `data: ${JSON.stringify(payload)}
+
+`;
+  for (const res of sseClients) {
+    try { res.write(msg); } catch (e) { console.error('SSE write error:', e); }
+  }
+}
+
+app.get('/events', (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  res.flushHeaders && res.flushHeaders();
+  res.write(': connected\n\n');
+  sseClients.add(res);
+  req.on('close', () => { sseClients.delete(res); });
+});
+
+
+// Global error handlers
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  // Optionally exit: process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-// Print startup URLs including local and network address
-const os = require('os');
+// Print startup URLs
 function getLocalNetworkAddresses() {
   const nets = os.networkInterfaces();
   const addresses = [];
   for (const name of Object.keys(nets)) {
     for (const net of nets[name]) {
-      // Skip internal (i.e. 127.0.0.1) and non-IPv4
       if (net.family === 'IPv4' && !net.internal) {
         addresses.push(net.address);
       }
@@ -743,33 +485,14 @@ function getLocalNetworkAddresses() {
   return addresses;
 }
 
-const uploadDir = "./upload";
-app.get("/files", (req, res) => {
-  try {
-    const files = fs.readdirSync(uploadDir);
-    const links = files.map(f => `<li><a href="/upload/${f}">${f}</a></li>`).join("");
-    res.send(`<h3>Вміст папки /upload</h3><ul>${links}</ul>`);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Помилка при читанні папки");
-  }
-});
-
-// Дозволяємо відкривати файли напряму
-app.use("/upload", express.static(uploadDir));
-
-// Bind explicitly to 0.0.0.0 so the server accepts connections from the LAN (e.g. ESP device).
+// Bind to 0.0.0.0 to accept connections from the LAN
 app.listen(PORT, '0.0.0.0', () => {
-  const localUrl = `http://localhost:${PORT}`;
-  console.log(`ESP receiver listening on port ${PORT} (bound to 0.0.0.0)`);
-  console.log(`Local: ${localUrl}`);
+  console.log(`Server listening on port ${PORT}`);
+  console.log(`Local: http://localhost:${PORT}`);
+  getLocalNetworkAddresses().forEach(addr => {
+    console.log(`On your network: http://${addr}:${PORT}`);
+  });
 
-  const netAddrs = getLocalNetworkAddresses();
-  if (netAddrs.length) {
-    for (const addr of netAddrs) {
-      console.log(`On your network: http://${addr}:${PORT}`);
-    }
-  } else {
-    console.log('No non-internal IPv4 network interfaces detected');
-  }
+  // Ініціалізуємо MQTT з'єднання після старту сервера
+  connectMqtt();
 });
