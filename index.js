@@ -72,7 +72,7 @@ let config = {
   // Нові налаштування для MQTT
   mqtt: {
     enabled: false,
-    brokerUrl: "mqtts://fbb7aa6637c2419c977d735a10965362.s1.eu.hivemq.cloud:8883",
+    brokerUrl: "mqtts://mqtt-dashboard.com:8883",
     username: "",
     password: "",
     baseTopic: "esp_device"
@@ -121,7 +121,7 @@ function connectMqtt() {
   const options = {
     username: config.mqtt.username,
     password: config.mqtt.password,
-    clientId: `server_${crypto.randomBytes(4).toString('hex')}`
+    clientId: "clientId-2b84Npwmru"
   };
 
   console.log(`[MQTT] Connecting to ${config.mqtt.brokerUrl}`);
