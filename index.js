@@ -76,7 +76,7 @@ let config = {
     username: "",
     password: "",
     baseTopic: "esp_device",
-    clientId: "clientId-2b84Npwmru"
+    clientId: "client-"+Math.random().toString(36).slice(2,9)
   }
 };
 
