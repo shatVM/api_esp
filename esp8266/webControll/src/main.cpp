@@ -223,6 +223,15 @@ void reconnectMqtt() {
   }
   lastMqttReconnectAttempt = now;
 
+  Serial.println("[CONFIG] Current Configuration:");
+  Serial.printf("  - MQTT Enabled: %s\n", config.mqttEnabled ? "true" : "false");
+  Serial.printf("  - MQTT Broker: %s\n", config.mqttBrokerUrl.c_str());
+  Serial.printf("  - MQTT Port: %d\n", config.mqttPort);
+  Serial.printf("  - MQTT User: %s\n", config.mqttUsername.c_str());
+  Serial.printf("  - MQTT Base Topic: %s\n", config.mqttBaseTopic.c_str());
+  Serial.printf("  - Upload Interval: %d\n", config.uploadIntervalSeconds);
+  Serial.printf("  - Device Name: %s\n", config.deviceName.c_str());
+
   Serial.print("[MQTT] Attempting to connect to broker... ");
   String clientId = "ESP8266-" + String(ESP.getChipId(), HEX);
   
@@ -256,7 +265,6 @@ void fetchInitialConfig() {
   String configUrl = "https://api-esp-tnww.onrender.com/api/config"; 
   
   // Use WiFiClientSecure for HTTPS
-  // BearSSL::WiFiClientSecure clientSecure; // More explicit for clarity
   std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure());
 
   // Allow insecure connections (don't validate certificate)
@@ -283,16 +291,11 @@ void fetchInitialConfig() {
             JsonObject mqttConfig = doc["mqtt"];
             config.mqttEnabled = mqttConfig["enabled"] | false;
             config.mqttBrokerUrl = mqttConfig["brokerUrl"].as<String>();
-            config.mqttPort = mqttConfig["port"] | 1883;
+            config.mqttPort = mqttConfig["port"] | 8883; // Default to secure port
             config.mqttUsername = mqttConfig["username"].as<String>();
             config.mqttPassword = mqttConfig["password"].as<String>();
             config.mqttBaseTopic = mqttConfig["baseTopic"].as<String>();
         }
-
-        // --- DEBUG OVERRIDE ---
-        // Forcing MQTT to be enabled because the remote configuration has it disabled.
-        // This allows the device to proceed with MQTT operations.
-        config.mqttEnabled = true;
 
         Serial.println("[INFO] Configuration parsed and applied.");
       } else {

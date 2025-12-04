@@ -72,7 +72,7 @@ let config = {
   // Нові налаштування для MQTT
   mqtt: {
     enabled: false,
-    brokerUrl: "mqtt://test.mosquitto.org",
+    brokerUrl: "mqtts://fbb7aa6637c2419c977d735a10965362.s1.eu.hivemq.cloud:8883",
     username: "",
     password: "",
     baseTopic: "esp_device"
