@@ -71,11 +71,12 @@ let config = {
   deviceName: "",
   // Нові налаштування для MQTT
   mqtt: {
-    enabled: false,
-    brokerUrl: "mqtts://mqtt-dashboard.com:8883",
+    enabled: true,
+    brokerUrl: "mqtts://mqtt-dashboard.com",
     username: "",
     password: "",
-    baseTopic: "esp_device"
+    baseTopic: "esp_device",
+    clientId: "clientId-2b84Npwmru"
   }
 };
 
