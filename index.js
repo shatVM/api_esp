@@ -66,7 +66,6 @@ let config = {
   autoLightStartTime: "07:00",
   autoLightEndTime: "22:00",
   lastSavedLocalTime: null,
-  wifi: [],
   sendAddresses: [],
   deviceName: "",
   // Нові налаштування для MQTT
@@ -89,12 +88,6 @@ try {
     config = Object.assign(config, parsed);
     if (parsed.mqtt) {
         config.mqtt = Object.assign(config.mqtt, parsed.mqtt);
-    }
-    // backward compatibility for wifi
-    if (Array.isArray(parsed.wifi)) {
-      config.wifi = parsed.wifi.map(w => ({ ssid: w.ssid || '', password: w.password || '', enabled: !!w.enabled }));
-    } else if (parsed.wifi && typeof parsed.wifi === 'object') {
-      config.wifi = [{ ssid: parsed.wifi.ssid || '', password: parsed.wifi.password || '', enabled: true }];
     }
     console.log('Configuration loaded:', config);
   } else {

@@ -76,58 +76,6 @@ function formatIsoToDisplay(iso) {
   }
 }
 
-// WiFi item builder
-function createWifiItem(item = { ssid: '', password: '', enabled: true }) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'sensor-item wifi-item';
-  wrapper.innerHTML = `
-    <div class="flex-row">
-      <input type="checkbox" class="wifi-enabled" ${item.enabled ? 'checked' : ''} title="Enable network" />
-      <div class="flex-column wifi-inputs">
-        <input class="form-control wifi-ssid" type="text" placeholder="SSID" value="${escapeHtml(item.ssid)}" />
-        <input class="form-control wifi-pass" type="password" placeholder="Password" value="${escapeHtml(item.password)}" />
-      </div>
-      <div class="controls">
-        <button class="btn btn-small info btn-up" type="button"><i data-lucide="chevron-up"></i></button>
-        <button class="btn btn-small info btn-down" type="button"><i data-lucide="chevron-down"></i></button>
-        <button class="btn btn-small danger btn-remove" type="button"><i data-lucide="trash-2"></i></button>
-      </div>
-    </div>
-  `;
-
-  // mark as unsaved when changed
-  wrapper.querySelectorAll('input').forEach(inp => {
-    inp.addEventListener('input', () => wrapper.classList.add('unsaved'));
-    inp.addEventListener('change', () => wrapper.classList.add('unsaved'));
-  });
-
-  wrapper.querySelector('.btn-remove').addEventListener('click', () => wrapper.remove());
-  wrapper.querySelector('.btn-up').addEventListener('click', () => moveItem(wrapper, -1));
-  wrapper.querySelector('.btn-down').addEventListener('click', () => moveItem(wrapper, 1));
-  // toggle .unactive on buttons when checkbox changes
-  const cb = wrapper.querySelector('.wifi-enabled');
-  function applyWifiEnabledState() {
-    const enabled = !!cb.checked;
-    const buttons = wrapper.querySelectorAll('.controls .btn');
-    buttons.forEach(b => {
-      if (!enabled) b.classList.add('unactive'); else b.classList.remove('unactive');
-    });
-  }
-  cb.addEventListener('change', () => { wrapper.classList.toggle('unactive', !cb.checked); applyWifiEnabledState(); wrapper.classList.add('unsaved'); });
-  // initial state
-  applyWifiEnabledState();
-  // render icons if lucide is available - target only this item's icons
-  if (window.lucide && typeof lucide.createIcons === 'function') {
-    // Use setTimeout to ensure icons are rendered after DOM insertion
-    setTimeout(() => {
-      const icons = wrapper.querySelectorAll('[data-lucide]');
-      if (icons.length > 0) lucide.createIcons();
-    }, 0);
-  }
-
-  return wrapper;
-}
-
 // Server address item builder
 function createServerItem(value = '') {
   const wrapper = document.createElement('div');
@@ -210,16 +158,6 @@ async function loadConfig() {
     if (lastSavedEl) lastSavedEl.textContent = formatIsoToDisplay(cfg.lastSavedLocalTime || cfg.currentTime) || '—';
     document.getElementById('deviceName').value = cfg.deviceName || '';
 
-    // wifi list
-    const wifiList = document.getElementById('wifiList');
-    wifiList.innerHTML = '';
-    const networks = Array.isArray(cfg.wifi) ? cfg.wifi : [];
-    if (networks.length === 0) {
-      wifiList.appendChild(createWifiItem({ ssid: '', password: '', enabled: true }));
-    } else {
-      networks.forEach(n => wifiList.appendChild(createWifiItem(n)));
-    }
-
     // servers list
     const list = document.getElementById('sendAddressesList');
     list.innerHTML = '';
@@ -272,10 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('addAddressBtn').addEventListener('click', () => {
     document.getElementById('sendAddressesList').appendChild(createServerItem(''));
-  });
-
-  document.getElementById('addWifiBtn').addEventListener('click', () => {
-    document.getElementById('wifiList').appendChild(createWifiItem({ ssid: '', password: '', enabled: true }));
   });
 
   const cfgForm = document.getElementById('configForm');
@@ -333,14 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const payload = {};
       payload.deviceName = document.getElementById('deviceName').value || '';
-
-      // wifi list
-      const wifiEls = Array.from(document.querySelectorAll('#wifiList .wifi-item'));
-      payload.wifi = wifiEls.map(w => ({
-        ssid: w.querySelector('.wifi-ssid').value || '',
-        password: w.querySelector('.wifi-pass').value || '',
-        enabled: !!w.querySelector('.wifi-enabled').checked
-      }));
 
       // addresses
       const addrEls = Array.from(document.querySelectorAll('.server-item'));

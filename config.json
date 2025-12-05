@@ -6,7 +6,6 @@
   "autoLightStartTime": "07:00",
   "autoLightEndTime": "22:00",
   "lastSavedLocalTime": null,
-  "wifi": [],
   "sendAddresses": [],
   "deviceName": "",
   "mqtt": {
