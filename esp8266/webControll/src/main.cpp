@@ -42,8 +42,8 @@ const float VOLTAGE_DIVIDER_RATIO = 5.0;
 struct Config {
   // MQTT Settings
   bool mqttEnabled = false;
-  String mqttBrokerUrl = "mqtts://mqtt-dashboard.com";
-  int mqttPort = 8883;
+  String mqttBrokerUrl = "mqtt://mqtt-dashboard.com";
+  int mqttPort = 1883;
   String mqttUsername = "";
   String mqttPassword = "";
   String mqttBaseTopic = "esp_device";

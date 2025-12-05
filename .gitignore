@@ -5,7 +5,7 @@
 /received.json
 /pins.json
 /upload/
-config.json
+#config.json
 
 # Файл для локальних змінних середовища
 .env

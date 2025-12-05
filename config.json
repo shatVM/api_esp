@@ -1,0 +1,20 @@
+{
+  "enableAutoLight": false,
+  "enableLightThreshold": false,
+  "lightThreshold": 40,
+  "uploadIntervalSeconds": 30,
+  "autoLightStartTime": "07:00",
+  "autoLightEndTime": "22:00",
+  "lastSavedLocalTime": null,
+  "wifi": [],
+  "sendAddresses": [],
+  "deviceName": "",
+  "mqtt": {
+    "enabled": true,
+    "brokerUrl": "mqtt://mqtt-dashboard.com:1883",
+    "username": "",
+    "password": "",
+    "baseTopic": "esp_device",
+    "clientId": "clientId-server"
+  }
+}
